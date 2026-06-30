@@ -38,6 +38,36 @@ export interface BridgeApp {
   stop(): Promise<void>;
 }
 
+/** The slice of the Slack Web client the message handler uses. */
+export interface SlackPostClient {
+  chat: {
+    postMessage(args: { channel: string; text: string; thread_ts?: string }): Promise<unknown>;
+  };
+}
+
+/**
+ * Build the message-handling callback: normalize the raw event, and on a real
+ * message route it through the handler, posting replies via the client. Bolt's
+ * `client.web` shape is injected so this glue is testable without a connection.
+ */
+export function makeMessageHandler(
+  deps: Omit<HandlerDeps, "post">,
+  getBotUserId: () => string,
+): (message: RawMessage, client: SlackPostClient) => Promise<void> {
+  return async (message, client) => {
+    const msg = normalizeMessage(message, getBotUserId());
+    if (!msg) return;
+    const post: HandlerDeps["post"] = async (channel, text, threadTs) => {
+      await client.chat.postMessage({
+        channel,
+        text,
+        ...(threadTs ? { thread_ts: threadTs } : {}),
+      });
+    };
+    await handleInbound({ ...deps, post }, msg);
+  };
+}
+
 /**
  * Build the Bolt app in Socket Mode and wire message events to the handler.
  * No public inbound endpoint is opened (local-first).
@@ -64,18 +94,10 @@ export function createSlackApp(
   });
 
   let botUserId = "";
+  const onMessage = makeMessageHandler(deps, () => botUserId);
 
   app.message(async ({ message, client }) => {
-    const msg = normalizeMessage(message as RawMessage, botUserId);
-    if (!msg) return;
-    const post: HandlerDeps["post"] = async (channel, text, threadTs) => {
-      await client.chat.postMessage({
-        channel,
-        text,
-        ...(threadTs ? { thread_ts: threadTs } : {}),
-      });
-    };
-    await handleInbound({ ...deps, post }, msg);
+    await onMessage(message as RawMessage, client as SlackPostClient);
   });
 
   return {
