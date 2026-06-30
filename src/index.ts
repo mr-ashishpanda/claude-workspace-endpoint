@@ -4,6 +4,7 @@ import { resolveHome } from "./config/paths.js";
 import { MissingCredentialsError, claudeBin, loadCredentials } from "./config/credentials.js";
 import { MappingStore } from "./config/mappings.js";
 import { SessionStore } from "./session/store.js";
+import { KeyedSerializer } from "./session/serializer.js";
 import { createSlackApp } from "./slack/app.js";
 
 /** Bridge entrypoint: wire config + stores + Slack app, then run. */
@@ -29,8 +30,13 @@ async function main(): Promise<void> {
     logger.warn("no mappings configured — run `slack-claude map add` to create one.");
   }
   const sessions = SessionStore.load(home);
+  const serializer = new KeyedSerializer();
 
-  const app = createSlackApp(creds, { mappings, sessions, logger, claudeBin: claudeBin() }, logger);
+  const app = createSlackApp(
+    creds,
+    { mappings, sessions, logger, claudeBin: claudeBin(), serializer },
+    logger,
+  );
 
   const shutdown = async (signal: string) => {
     logger.info(`received ${signal}, shutting down…`);
