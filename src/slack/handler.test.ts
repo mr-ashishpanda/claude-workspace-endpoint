@@ -108,6 +108,21 @@ describe("handleInbound", () => {
     expect(posts).toHaveLength(0);
   });
 
+  it("posts an identity-prefixed warning when the Claude invocation fails", async () => {
+    const { deps, sessions, posts } = setup({ trigger: "auto" });
+    // Override invoke to throw, simulating e.g. a missing claude binary.
+    deps.invoke = async () => {
+      throw new Error("spawn claude ENOENT");
+    };
+    await handleInbound(deps, msg({ text: "do it" }));
+    expect(posts).toHaveLength(1);
+    expect(posts[0]!.text).toContain("[auth-investigator]");
+    expect(posts[0]!.text).toContain(":warning:");
+    expect(posts[0]!.text).toContain("ENOENT");
+    // A failed invocation must not count toward messages processed.
+    expect(sessions.get("C1")?.messagesProcessed).toBe(0);
+  });
+
   it("end-to-end with NO fakes: real claude invocation + session persistence", async () => {
     // Whole non-Slack vertical slice: handler → real invokeClaude → real spawn
     // of a stub `claude` → JSON parse → session id captured and reused.
