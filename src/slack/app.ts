@@ -6,6 +6,34 @@ import { InboundMessage } from "./router.js";
 
 const { App } = bolt;
 
+/** A leaf node inside a rich_text section. */
+interface RichTextLeaf {
+  type: string;
+  text?: string;
+  user_id?: string;
+  channel_id?: string;
+  name?: string;
+  url?: string;
+  range?: string;
+}
+
+/**
+ * A block element: rich_text_section / _list / _quote / _preformatted (which
+ * carry `elements`), or other block elements like context `mrkdwn` (which carry
+ * `text`). Only rich_text sections are read; the rest are tolerated and ignored.
+ */
+interface RichTextElement {
+  type: string;
+  elements?: RichTextLeaf[];
+  text?: string;
+}
+
+/** A top-level Slack message block. */
+interface Block {
+  type: string;
+  elements?: RichTextElement[];
+}
+
 /** Minimal shape of the Slack message events we care about. */
 interface RawMessage {
   subtype?: string;
@@ -15,6 +43,50 @@ interface RawMessage {
   thread_ts?: string;
   bot_id?: string;
   user?: string;
+  blocks?: Block[];
+}
+
+/** Render one rich_text leaf back into Slack's mrkdwn token form. */
+function renderLeaf(leaf: RichTextLeaf): string {
+  switch (leaf.type) {
+    case "text":
+      return leaf.text ?? "";
+    case "user":
+      return leaf.user_id ? `<@${leaf.user_id}>` : "";
+    case "channel":
+      return leaf.channel_id ? `<#${leaf.channel_id}>` : "";
+    case "emoji":
+      return leaf.name ? `:${leaf.name}:` : "";
+    case "link":
+      return leaf.text ?? leaf.url ?? "";
+    case "broadcast":
+      return leaf.range ? `<!${leaf.range}>` : "";
+    default:
+      return leaf.text ?? "";
+  }
+}
+
+/**
+ * Extract the user-authored text from a message. Slack apps/integrations append
+ * `context` blocks (e.g. a "Sent using …" footer) that get flattened into the
+ * `text` field — polluting prompts and breaking exact-match commands like
+ * `@claude status`. When `rich_text` blocks are present, reconstruct the text
+ * from those (the authored content) and ignore context blocks; otherwise fall
+ * back to the flat `text` field.
+ */
+export function extractText(raw: RawMessage): string {
+  const richText = (raw.blocks ?? []).filter((b) => b.type === "rich_text");
+  if (richText.length === 0) return raw.text ?? "";
+  const parts: string[] = [];
+  for (const block of richText) {
+    for (const section of block.elements ?? []) {
+      for (const leaf of section.elements ?? []) {
+        parts.push(renderLeaf(leaf));
+      }
+    }
+  }
+  const reconstructed = parts.join("").trim();
+  return reconstructed || (raw.text ?? "");
 }
 
 /**
@@ -31,7 +103,7 @@ export function normalizeMessage(raw: RawMessage, botUserId: string): InboundMes
   // Only plain user messages; skip edits, deletes, joins, bot posts, etc.
   if (raw.subtype && raw.subtype !== "thread_broadcast") return null;
   if (!raw.channel || !raw.ts) return null;
-  const text = raw.text ?? "";
+  const text = extractText(raw);
   return {
     channel: raw.channel,
     ts: raw.ts,
