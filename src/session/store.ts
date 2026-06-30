@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync, existsSync, renameSync } from "node:fs";
 import { dirname } from "node:path";
 import { SessionRecord } from "../config/types.js";
 import { resolveHome, sessionsPath } from "../config/paths.js";
@@ -22,8 +22,22 @@ export class SessionStore {
     if (!existsSync(file)) return new SessionStore(file, []);
     const raw = readFileSync(file, "utf8").trim();
     if (!raw) return new SessionStore(file, []);
-    const parsed = JSON.parse(raw) as SessionRecord[];
-    return new SessionStore(file, Array.isArray(parsed) ? parsed : []);
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      if (!Array.isArray(parsed)) throw new Error("sessions file is not a JSON array");
+      return new SessionStore(file, parsed as SessionRecord[]);
+    } catch {
+      // Corrupt or partially-written sessions file (e.g. a crash mid-write).
+      // Quarantine it and start fresh rather than refusing to boot — session
+      // state is reconstructable, and a local-first bridge must still start.
+      // The bad file is preserved as `<file>.corrupt` for inspection.
+      try {
+        renameSync(file, file + ".corrupt");
+      } catch {
+        // If it can't be moved, carry on with empty in-memory state anyway.
+      }
+      return new SessionStore(file, []);
+    }
   }
 
   get(key: string): SessionRecord | undefined {

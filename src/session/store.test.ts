@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SessionStore } from "./store.js";
@@ -35,6 +35,25 @@ describe("SessionStore", () => {
     expect(rec?.claudeSessionId).toBe("sess_12345");
     expect(rec?.messagesProcessed).toBe(1);
     expect(rec?.createdAt).toBe("2026-06-29T14:10:00.000Z");
+  });
+
+  it("recovers from a corrupt sessions file instead of crashing (quarantines it)", () => {
+    // Simulate a partially-written / tampered file from a crash mid-write.
+    const file = join(home, "sessions.json");
+    writeFileSync(file, "{ this is not valid json");
+    const store = SessionStore.load(home); // must not throw
+    expect(store.all()).toEqual([]);
+    expect(existsSync(file + ".corrupt")).toBe(true);
+    // The recovered store is usable and persists normally afterwards.
+    store.getOrCreate("C1", "id", fixedNow);
+    expect(SessionStore.load(home).get("C1")).toBeDefined();
+  });
+
+  it("treats a non-array sessions file as corrupt", () => {
+    const file = join(home, "sessions.json");
+    writeFileSync(file, JSON.stringify({ not: "an array" }));
+    expect(SessionStore.load(home).all()).toEqual([]);
+    expect(existsSync(file + ".corrupt")).toBe(true);
   });
 
   it("increments processed count", () => {
