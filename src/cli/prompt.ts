@@ -1,5 +1,11 @@
 import { createInterface, Interface } from "node:readline";
 import { stdin, stdout } from "node:process";
+import type { Readable } from "node:stream";
+
+/** Where prompt labels are written (stdout by default; injectable for tests). */
+export interface PromptWriter {
+  write(text: string): void;
+}
 
 /**
  * Interactive CLI prompter built on event-based readline with a line queue.
@@ -7,16 +13,19 @@ import { stdin, stdout } from "node:process";
  * `readline/promises`' `question()` only resolves its first call when stdin is
  * piped (non-TTY), so it can't be driven non-interactively in tests or scripts.
  * Queueing 'line' events ourselves works for both a real terminal and piped
- * input, and degrades cleanly to defaults on EOF.
+ * input, and degrades cleanly to defaults on EOF. The input stream and writer
+ * are injectable so the behavior is unit-testable without a real TTY.
  */
 export class Prompter {
   private readonly rl: Interface;
   private readonly lines: string[] = [];
   private readonly waiters: ((line: string | null) => void)[] = [];
+  private readonly out: PromptWriter;
   private closed = false;
 
-  constructor() {
-    this.rl = createInterface({ input: stdin });
+  constructor(input: Readable = stdin, out: PromptWriter = stdout) {
+    this.out = out;
+    this.rl = createInterface({ input });
     this.rl.on("line", (line) => {
       const waiter = this.waiters.shift();
       if (waiter) waiter(line);
@@ -39,7 +48,7 @@ export class Prompter {
   /** Ask a free-text question with an optional default (used on empty/EOF). */
   async ask(question: string, fallback?: string): Promise<string> {
     const suffix = fallback ? ` [${fallback}]` : "";
-    stdout.write(`${question}${suffix}: `);
+    this.out.write(`${question}${suffix}: `);
     const line = await this.nextLine();
     const answer = (line ?? "").trim();
     return answer || fallback || "";
@@ -58,7 +67,7 @@ export class Prompter {
       if (this.closed && this.lines.length === 0) {
         throw new Error(`Expected one of: ${list}; got "${answer}".`);
       }
-      stdout.write(`  Please enter one of: ${list}\n`);
+      this.out.write(`  Please enter one of: ${list}\n`);
     }
   }
 
