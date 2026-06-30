@@ -30,6 +30,10 @@ describe("stripMentions / isStatusCommand", () => {
   it("removes mention tokens and trims", () => {
     expect(stripMentions(`${BOT} investigate this`)).toBe("investigate this");
   });
+  it("removes the <@UID|Display Name> mention form too", () => {
+    expect(stripMentions("<@UBOT|CWE Bot> status")).toBe("status");
+    expect(stripMentions("<@UBOT|CWE Bot> look into this")).toBe("look into this");
+  });
   it("detects the status command regardless of mention placement", () => {
     expect(isStatusCommand(`${BOT} status`)).toBe(true);
     expect(isStatusCommand(`status ${BOT}`)).toBe(true);
