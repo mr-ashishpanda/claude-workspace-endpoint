@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { normalizeMessage, makeMessageHandler, SlackPostClient } from "./app.js";
+import { normalizeMessage, makeMessageHandler, mentionsUser, SlackPostClient } from "./app.js";
 import { MappingStore } from "../config/mappings.js";
 import { SessionStore } from "../session/store.js";
 import { Logger } from "../logger.js";
@@ -33,9 +33,24 @@ describe("normalizeMessage", () => {
     expect(m?.mentionsBot).toBe(true);
   });
 
+  it("detects the <@UID|Display Name> mention form (real Slack traffic)", () => {
+    const m = normalizeMessage({ channel: "C1", ts: "1", text: `<@${BOT}|CWE Bot> status` }, BOT);
+    expect(m?.mentionsBot).toBe(true);
+  });
+
   it("does not flag a mention of a different user", () => {
     const m = normalizeMessage({ channel: "C1", ts: "1", text: "<@USOMEONE> hi" }, BOT);
     expect(m?.mentionsBot).toBe(false);
+  });
+});
+
+describe("mentionsUser", () => {
+  it("matches both <@UID> and <@UID|name> and nothing else", () => {
+    expect(mentionsUser("<@UBOT> hi", "UBOT")).toBe(true);
+    expect(mentionsUser("<@UBOT|CWE Bot> hi", "UBOT")).toBe(true);
+    expect(mentionsUser("<@UOTHER> hi", "UBOT")).toBe(false);
+    expect(mentionsUser("no mention", "UBOT")).toBe(false);
+    expect(mentionsUser("<@UBOT> hi", "")).toBe(false);
   });
 
   it("marks messages with a bot_id as fromBot (loop safety)", () => {

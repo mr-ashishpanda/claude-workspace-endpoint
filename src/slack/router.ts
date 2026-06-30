@@ -23,10 +23,13 @@ export interface RouteDecision {
   prompt?: string;
 }
 
-/** Strip every `<@U…>` mention token and collapse whitespace. */
+/**
+ * Strip every mention token and collapse whitespace. Slack encodes mentions as
+ * `<@U123>` or, with a display name, `<@U123|Some Name>` — handle both.
+ */
 export function stripMentions(text: string): string {
   return text
-    .replace(/<@[A-Z0-9]+>/g, " ")
+    .replace(/<@[A-Z0-9]+(?:\|[^>]+)?>/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }

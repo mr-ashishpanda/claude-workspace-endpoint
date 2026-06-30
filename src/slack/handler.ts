@@ -44,6 +44,10 @@ export async function handleInbound(deps: HandlerDeps, msg: InboundMessage): Pro
   for (const mapping of mappings) {
     const log = deps.logger.withIdentity(mapping.identity);
     const decision = route(mapping, msg);
+    log.debug(
+      `inbound text=${JSON.stringify(msg.text)} mentionsBot=${msg.mentionsBot} ` +
+        `fromBot=${msg.fromBot} → ${decision.action}`,
+    );
     if (decision.action === "ignore") continue;
 
     const key = decision.sessionKey!;

@@ -17,6 +17,15 @@ interface RawMessage {
   user?: string;
 }
 
+/**
+ * True if `text` @-mentions `userId`. Slack encodes a mention as `<@U123>` or,
+ * when a display name is present, `<@U123|Some Name>` — match either form.
+ */
+export function mentionsUser(text: string, userId: string): boolean {
+  if (!userId) return false;
+  return new RegExp(`<@${userId}(?:\\|[^>]+)?>`).test(text);
+}
+
 /** Convert a Bolt message event + bot id into our normalized InboundMessage. */
 export function normalizeMessage(raw: RawMessage, botUserId: string): InboundMessage | null {
   // Only plain user messages; skip edits, deletes, joins, bot posts, etc.
@@ -28,7 +37,7 @@ export function normalizeMessage(raw: RawMessage, botUserId: string): InboundMes
     ts: raw.ts,
     threadTs: raw.thread_ts,
     text,
-    mentionsBot: text.includes(`<@${botUserId}>`),
+    mentionsBot: mentionsUser(text, botUserId),
     fromBot: Boolean(raw.bot_id),
   };
 }
