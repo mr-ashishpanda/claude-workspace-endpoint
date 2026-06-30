@@ -2,7 +2,13 @@ import { describe, it, expect } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { normalizeMessage, makeMessageHandler, mentionsUser, SlackPostClient } from "./app.js";
+import {
+  normalizeMessage,
+  makeMessageHandler,
+  mentionsUser,
+  extractText,
+  SlackPostClient,
+} from "./app.js";
 import { MappingStore } from "../config/mappings.js";
 import { SessionStore } from "../session/store.js";
 import { Logger } from "../logger.js";
@@ -41,6 +47,99 @@ describe("normalizeMessage", () => {
   it("does not flag a mention of a different user", () => {
     const m = normalizeMessage({ channel: "C1", ts: "1", text: "<@USOMEONE> hi" }, BOT);
     expect(m?.mentionsBot).toBe(false);
+  });
+});
+
+describe("extractText", () => {
+  it("falls back to the flat text field when there are no blocks", () => {
+    expect(extractText({ text: "hello world" })).toBe("hello world");
+  });
+
+  it("reconstructs authored text from rich_text and ignores a context footer", () => {
+    // The exact shape captured from live Slack: a "Sent using Claude" footer
+    // context block flattened into `text` must NOT pollute the command.
+    const raw = {
+      text: "<@U0BE2EASS3X> status *Sent using* Claude",
+      blocks: [
+        {
+          type: "rich_text",
+          elements: [
+            {
+              type: "rich_text_section",
+              elements: [
+                { type: "user", user_id: "U0BE2EASS3X" },
+                { type: "text", text: " status" },
+              ],
+            },
+          ],
+        },
+        {
+          type: "context",
+          elements: [{ type: "mrkdwn", text: "*Sent using* Claude" }],
+        },
+      ],
+    };
+    expect(extractText(raw)).toBe("<@U0BE2EASS3X> status");
+  });
+
+  it("renders channels, emoji, and links inside rich_text", () => {
+    const raw = {
+      text: "ignored",
+      blocks: [
+        {
+          type: "rich_text",
+          elements: [
+            {
+              type: "rich_text_section",
+              elements: [
+                { type: "text", text: "see " },
+                { type: "channel", channel_id: "C123" },
+                { type: "text", text: " " },
+                { type: "emoji", name: "wave" },
+                { type: "text", text: " " },
+                { type: "link", url: "https://x.test", text: "x" },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    expect(extractText(raw)).toBe("see <#C123> :wave: x");
+  });
+
+  it("falls back to text when rich_text reconstructs to empty", () => {
+    const raw = { text: "fallback", blocks: [{ type: "rich_text", elements: [] }] };
+    expect(extractText(raw)).toBe("fallback");
+  });
+});
+
+describe("normalizeMessage with blocks", () => {
+  it("detects @claude status when a footer context block is present", () => {
+    const m = normalizeMessage(
+      {
+        channel: "C1",
+        ts: "1",
+        text: "<@UBOT> status *Sent using* Claude",
+        blocks: [
+          {
+            type: "rich_text",
+            elements: [
+              {
+                type: "rich_text_section",
+                elements: [
+                  { type: "user", user_id: "UBOT" },
+                  { type: "text", text: " status" },
+                ],
+              },
+            ],
+          },
+          { type: "context", elements: [{ type: "mrkdwn", text: "*Sent using* Claude" }] },
+        ],
+      },
+      "UBOT",
+    );
+    expect(m?.text).toBe("<@UBOT> status");
+    expect(m?.mentionsBot).toBe(true);
   });
 });
 
