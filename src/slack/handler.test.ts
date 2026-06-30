@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MappingStore } from "../config/mappings.js";
 import { SessionStore } from "../session/store.js";
+import { KeyedSerializer } from "../session/serializer.js";
 import { Logger } from "../logger.js";
 import { handleInbound, HandlerDeps } from "./handler.js";
 import { InboundMessage } from "./router.js";
@@ -105,5 +106,43 @@ describe("handleInbound", () => {
     await handleInbound(deps, msg({ fromBot: true }));
     expect(invokes).toHaveLength(0);
     expect(posts).toHaveLength(0);
+  });
+
+  it("serializes concurrent same-key messages so they reuse one session", async () => {
+    const mappings = MappingStore.load(home);
+    mappings.add({
+      identity: "auth-investigator",
+      channel: "C1",
+      workspace: "/repos/auth",
+      scope: "channel",
+      trigger: "auto",
+    });
+    const sessions = SessionStore.load(home);
+    const invokes: (string | null)[] = [];
+    // A deliberately slow invoke so both messages are in flight at once — the
+    // exact condition that, without serialization, makes both start a *new*
+    // Claude session (resume=null).
+    const invoke = async (a: { resumeSessionId: string | null }): Promise<ClaudeResult> => {
+      invokes.push(a.resumeSessionId);
+      await new Promise((r) => setTimeout(r, 5));
+      return { text: "reply", sessionId: "sess_new" };
+    };
+    const deps: HandlerDeps = {
+      mappings,
+      sessions,
+      logger: new Logger("test", {}),
+      claudeBin: "claude",
+      serializer: new KeyedSerializer(),
+      post: async () => {},
+      invoke,
+    };
+
+    await Promise.all([
+      handleInbound(deps, msg({ ts: "100.1" })),
+      handleInbound(deps, msg({ ts: "100.2" })),
+    ]);
+
+    expect(invokes).toEqual([null, "sess_new"]); // first new, second resumes
+    expect(sessions.get("C1")?.messagesProcessed).toBe(2);
   });
 });
