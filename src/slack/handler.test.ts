@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync, chmodSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MappingStore } from "../config/mappings.js";
@@ -106,6 +106,53 @@ describe("handleInbound", () => {
     await handleInbound(deps, msg({ fromBot: true }));
     expect(invokes).toHaveLength(0);
     expect(posts).toHaveLength(0);
+  });
+
+  it("end-to-end with NO fakes: real claude invocation + session persistence", async () => {
+    // Whole non-Slack vertical slice: handler → real invokeClaude → real spawn
+    // of a stub `claude` → JSON parse → session id captured and reused.
+    const bin = join(home, "claude-stub");
+    writeFileSync(
+      bin,
+      `#!/usr/bin/env node
+let s = "";
+process.stdin.on("data", (d) => (s += d));
+process.stdin.on("end", () => {
+  const resumed = process.argv.includes("--resume");
+  process.stdout.write(JSON.stringify({ result: resumed ? "resumed" : "fresh", session_id: "stub-session" }));
+});
+`,
+    );
+    chmodSync(bin, 0o755);
+
+    const mappings = MappingStore.load(home);
+    mappings.add({
+      identity: "auth-investigator",
+      channel: "C1",
+      workspace: home,
+      scope: "channel",
+      trigger: "auto",
+    });
+    const sessions = SessionStore.load(home);
+    const posts: Post[] = [];
+    const deps: HandlerDeps = {
+      mappings,
+      sessions,
+      logger: new Logger("test", {}),
+      claudeBin: bin,
+      post: async (channel, text, threadTs) => {
+        posts.push({ channel, text, threadTs });
+      },
+    };
+
+    await handleInbound(deps, msg({ ts: "100.1" }));
+    expect(sessions.get("C1")?.claudeSessionId).toBe("stub-session");
+    expect(posts[0]!.text).toContain("[auth-investigator]");
+    expect(posts[0]!.text).toContain("fresh");
+
+    await handleInbound(deps, msg({ ts: "100.2" }));
+    expect(posts[1]!.text).toContain("resumed"); // second message resumed the session
+    expect(sessions.get("C1")?.messagesProcessed).toBe(2);
   });
 
   it("serializes concurrent same-key messages so they reuse one session", async () => {
