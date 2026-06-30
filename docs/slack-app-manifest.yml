@@ -1,0 +1,48 @@
+# Slack app manifest for the Slack-Claude Bridge.
+#
+# Create the app from this manifest at https://api.slack.com/apps → "Create New
+# App" → "From an app manifest", then paste this file. After creating:
+#   1. Basic Information → "App-Level Tokens" → generate a token with the
+#      `connections:write` scope. This is your SLACK_APP_TOKEN (xapp-…).
+#   2. Install to Workspace → copy the "Bot User OAuth Token". This is your
+#      SLACK_BOT_TOKEN (xoxb-…).
+#   3. Basic Information → "Signing Secret" is your SLACK_SIGNING_SECRET.
+#   4. Run `node dist/cli/index.js init` and paste those three values.
+#   5. Invite the bot to each mapped channel: `/invite @<app name>`.
+#
+# Scopes and events below are exactly what the PRD requires (Slack Permissions)
+# and what the bridge uses — nothing more (least privilege).
+
+display_information:
+  name: Claude Bridge
+  description: Local-first bridge between Slack and Claude Code.
+  background_color: "#1a1a1a"
+
+features:
+  bot_user:
+    display_name: claude
+    always_online: true
+
+oauth_config:
+  scopes:
+    bot:
+      - app_mentions:read # receive app-mention events
+      - channels:history # read public channel messages
+      - channels:read # read public channel metadata
+      - groups:history # read private channel messages
+      - groups:read # read private channel metadata
+      - chat:write # post messages
+
+settings:
+  # Socket Mode — no public inbound endpoint (local-first).
+  socket_mode_enabled: true
+  event_subscriptions:
+    bot_events:
+      # The bridge listens to message events (which also carry @-mentions) and
+      # to app_mention. message.channels/.groups are required for auto-trigger
+      # mappings and for detecting mentions in mention-trigger mappings.
+      - app_mention
+      - message.channels
+      - message.groups
+  org_deploy_enabled: false
+  token_rotation_enabled: false

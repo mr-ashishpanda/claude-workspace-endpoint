@@ -35,10 +35,11 @@ restarts.
 
 - Node.js ≥ 20
 - The `claude` CLI on your `PATH` (or set `CLAUDE_CLI_BIN`)
-- A Slack app with Socket Mode enabled — see [docs/AGENT-SETUP.md](docs/AGENT-SETUP.md) and the
-  permissions in [docs/prd.md](docs/prd.md). Required scopes include reading public/private channel
-  history and metadata, posting messages, and receiving app-mention events; subscribe to
-  `message.channels`, `message.groups`, and `app_mention`.
+- A Slack app with Socket Mode enabled. Create it from the ready-to-paste manifest at
+  [docs/slack-app-manifest.yml](docs/slack-app-manifest.yml) — it sets exactly the scopes and event
+  subscriptions the PRD requires (`channels:history`/`groups:history`, `channels:read`/`groups:read`,
+  `chat:write`, `app_mentions:read`; events `message.channels`, `message.groups`, `app_mention`). The
+  manifest's header lists the steps to obtain the bot token, app-level token, and signing secret.
 
 ## Install
 
