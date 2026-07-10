@@ -48,6 +48,40 @@ describe("normalizeMessage", () => {
     const m = normalizeMessage({ channel: "C1", ts: "1", text: "<@USOMEONE> hi" }, BOT);
     expect(m?.mentionsBot).toBe(false);
   });
+
+  it("allows the file_share subtype and extracts attachments", () => {
+    const m = normalizeMessage(
+      {
+        subtype: "file_share",
+        channel: "C1",
+        ts: "100.5",
+        text: "look",
+        files: [
+          {
+            id: "F1",
+            name: "diagram.png",
+            mimetype: "image/png",
+            url_private: "https://files.slack.com/F1",
+          },
+        ],
+      },
+      BOT,
+    );
+    expect(m).not.toBeNull();
+    expect(m?.files).toEqual([
+      {
+        id: "F1",
+        name: "diagram.png",
+        mimetype: "image/png",
+        urlPrivate: "https://files.slack.com/F1",
+      },
+    ]);
+  });
+
+  it("omits files entirely when the message has none", () => {
+    const m = normalizeMessage({ channel: "C1", ts: "1", text: "hi" }, BOT);
+    expect(m).not.toHaveProperty("files");
+  });
 });
 
 describe("extractText", () => {
@@ -234,7 +268,7 @@ describe("makeMessageHandler (Bolt glue → chat.postMessage)", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0]!.channel).toBe("C1");
     expect(calls[0]!.thread_ts).toBeUndefined();
-    expect(calls[0]!.text).toContain("[auth-investigator]");
+    expect(calls[0]!.text).toContain("auth-investigator | s1");
     rmSync(home, { recursive: true, force: true });
   });
 

@@ -4,8 +4,12 @@ import { existsSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { MappingStore, MappingValidationError } from "../config/mappings.js";
 import { resolveHome } from "../config/paths.js";
-import { SESSION_SCOPES, TRIGGER_MODES } from "../config/types.js";
+import { SESSION_SCOPES, TRIGGER_MODES, CLAUDE_MODELS } from "../config/types.js";
 import { Prompter } from "./prompt.js";
+
+const SKIP_PERMISSIONS_WARNING =
+  "Skip permission prompts (--dangerously-skip-permissions)?\n" +
+  "  WARNING: Claude will act without asking. Only for trusted workspaces.";
 
 function usage(): void {
   process.stdout.write(
@@ -72,10 +76,23 @@ async function cmdMapAdd(): Promise<void> {
     const workspace = await p.ask("Workspace directory (absolute path)");
     const scope = await p.choose("Session scope", SESSION_SCOPES, "channel");
     const trigger = await p.choose("Trigger mode", TRIGGER_MODES, "mention");
-    const mapping = store.add({ identity, channel, workspace, scope, trigger });
+    const model = await p.choose("Model family (default = latest, auto)", CLAUDE_MODELS, "default");
+    const skipPermissions = await p.confirm(SKIP_PERMISSIONS_WARNING);
+    const claudeConfigDir = await p.ask("Custom CLAUDE_CONFIG_DIR (blank = bridge default)");
+    const mapping = store.add({
+      identity,
+      channel,
+      workspace,
+      scope,
+      trigger,
+      model,
+      skipPermissions,
+      claudeConfigDir,
+    });
     process.stdout.write(
       `Added mapping [${mapping.identity}] → ${mapping.workspace} ` +
-        `(${mapping.scope}/${mapping.trigger}).\n`,
+        `(${mapping.scope}/${mapping.trigger}, model=${mapping.model}` +
+        `${mapping.skipPermissions ? ", skip-permissions" : ""}).\n`,
     );
   } finally {
     p.close();
@@ -92,10 +109,13 @@ function cmdMapList(): void {
   for (const m of mappings) {
     process.stdout.write(
       `[${m.identity}]\n` +
-        `  channel:   ${m.channel}\n` +
-        `  workspace: ${m.workspace}\n` +
-        `  scope:     ${m.scope}\n` +
-        `  trigger:   ${m.trigger}\n`,
+        `  channel:     ${m.channel}\n` +
+        `  workspace:   ${m.workspace}\n` +
+        `  scope:       ${m.scope}\n` +
+        `  trigger:     ${m.trigger}\n` +
+        `  model:       ${m.model}\n` +
+        `  permissions: ${m.skipPermissions ? "skipped (dangerous)" : "enforced"}\n` +
+        `  config dir:  ${m.claudeConfigDir ?? "(bridge default)"}\n`,
     );
   }
 }
@@ -114,7 +134,25 @@ async function cmdMapEdit(identity: string): Promise<void> {
     const workspace = await p.ask("Workspace directory", current.workspace);
     const scope = await p.choose("Session scope", SESSION_SCOPES, current.scope);
     const trigger = await p.choose("Trigger mode", TRIGGER_MODES, current.trigger);
-    const updated = store.edit(identity, { channel, workspace, scope, trigger });
+    const model = await p.choose(
+      "Model family (default = latest, auto)",
+      CLAUDE_MODELS,
+      current.model,
+    );
+    const skipPermissions = await p.confirm(SKIP_PERMISSIONS_WARNING, current.skipPermissions);
+    const claudeConfigDir = await p.ask(
+      "Custom CLAUDE_CONFIG_DIR (blank = bridge default)",
+      current.claudeConfigDir,
+    );
+    const updated = store.edit(identity, {
+      channel,
+      workspace,
+      scope,
+      trigger,
+      model,
+      skipPermissions,
+      claudeConfigDir,
+    });
     process.stdout.write(`Updated mapping [${updated.identity}].\n`);
   } finally {
     p.close();

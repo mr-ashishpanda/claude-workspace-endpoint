@@ -3,6 +3,7 @@ import { Logger } from "../logger.js";
 import { SlackCredentials } from "../config/credentials.js";
 import { HandlerDeps, handleInbound } from "./handler.js";
 import { InboundMessage } from "./router.js";
+import { SlackFile } from "./files.js";
 
 const { App } = bolt;
 
@@ -34,6 +35,14 @@ interface Block {
   elements?: RichTextElement[];
 }
 
+/** A file attachment as Slack delivers it on a message event. */
+interface RawFile {
+  id?: string;
+  name?: string;
+  mimetype?: string;
+  url_private?: string;
+}
+
 /** Minimal shape of the Slack message events we care about. */
 interface RawMessage {
   subtype?: string;
@@ -44,6 +53,17 @@ interface RawMessage {
   bot_id?: string;
   user?: string;
   blocks?: Block[];
+  files?: RawFile[];
+}
+
+/** Message subtypes that are still real user messages we should process. */
+const ALLOWED_SUBTYPES = new Set(["thread_broadcast", "file_share"]);
+
+/** Normalize the raw `files[]` into our SlackFile shape, dropping incomplete entries. */
+function extractFiles(raw: RawMessage): SlackFile[] {
+  return (raw.files ?? [])
+    .filter((f): f is Required<RawFile> => Boolean(f.id && f.name && f.mimetype && f.url_private))
+    .map((f) => ({ id: f.id, name: f.name, mimetype: f.mimetype, urlPrivate: f.url_private }));
 }
 
 /** Render one rich_text leaf back into Slack's mrkdwn token form. */
@@ -101,9 +121,11 @@ export function mentionsUser(text: string, userId: string): boolean {
 /** Convert a Bolt message event + bot id into our normalized InboundMessage. */
 export function normalizeMessage(raw: RawMessage, botUserId: string): InboundMessage | null {
   // Only plain user messages; skip edits, deletes, joins, bot posts, etc.
-  if (raw.subtype && raw.subtype !== "thread_broadcast") return null;
+  // file_share and thread_broadcast are real user messages we still process.
+  if (raw.subtype && !ALLOWED_SUBTYPES.has(raw.subtype)) return null;
   if (!raw.channel || !raw.ts) return null;
   const text = extractText(raw);
+  const files = extractFiles(raw);
   return {
     channel: raw.channel,
     ts: raw.ts,
@@ -111,6 +133,8 @@ export function normalizeMessage(raw: RawMessage, botUserId: string): InboundMes
     text,
     mentionsBot: mentionsUser(text, botUserId),
     fromBot: Boolean(raw.bot_id),
+    // Omit the key entirely when there are no attachments (keeps plain messages clean).
+    ...(files.length > 0 ? { files } : {}),
   };
 }
 
