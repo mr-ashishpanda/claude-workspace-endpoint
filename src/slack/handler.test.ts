@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync, chmodSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync, chmodSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MappingStore } from "../config/mappings.js";
@@ -9,6 +9,8 @@ import { Logger } from "../logger.js";
 import { handleInbound, HandlerDeps } from "./handler.js";
 import { InboundMessage } from "./router.js";
 import { ClaudeResult } from "../claude/invoke.js";
+import { MediaStore } from "../session/media.js";
+import { SlackFile } from "./files.js";
 
 let home: string;
 beforeEach(() => {
@@ -43,6 +45,11 @@ function setup(over: Partial<{ scope: "channel" | "thread"; trigger: "mention" |
     invokes.push({ prompt: a.prompt, resume: a.resumeSessionId });
     return { text: "claude reply", sessionId: "sess_new" };
   };
+  const downloads: string[] = [];
+  const download = async (f: SlackFile): Promise<Buffer> => {
+    downloads.push(f.id);
+    return Buffer.from(`bytes-of-${f.name}`);
+  };
   const deps: HandlerDeps = {
     mappings,
     sessions,
@@ -52,9 +59,19 @@ function setup(over: Partial<{ scope: "channel" | "thread"; trigger: "mention" |
       posts.push({ channel, text, threadTs });
     },
     invoke,
+    download,
+    media: new MediaStore(home),
   };
-  return { deps, sessions, posts, invokes };
+  return { deps, sessions, posts, invokes, downloads, home };
 }
+
+const image = (over: Partial<SlackFile> = {}): SlackFile => ({
+  id: "F1",
+  name: "diagram.png",
+  mimetype: "image/png",
+  urlPrivate: "https://files.slack.com/F1",
+  ...over,
+});
 
 function msg(over: Partial<InboundMessage> = {}): InboundMessage {
   return { channel: "C1", ts: "100.1", text: "hi", mentionsBot: false, fromBot: false, ...over };
@@ -69,6 +86,17 @@ describe("handleInbound", () => {
     expect(posts[0]!.text).toContain("[auth-investigator]");
     expect(posts[0]!.text).toContain("claude reply");
     expect(posts[0]!.threadTs).toBeUndefined();
+  });
+
+  it("appends a session-id footer only on the first reply of a session", async () => {
+    const { deps, posts } = setup({ trigger: "auto" });
+    await handleInbound(deps, msg({ text: "first" }));
+    await handleInbound(deps, msg({ ts: "101.0", text: "second" }));
+
+    // First reply advertises the identity + session id (for resuming), in small text.
+    expect(posts[0]!.text).toContain("auth-investigator | sess_new");
+    // Subsequent replies stay clean.
+    expect(posts[1]!.text).not.toContain("sess_new");
   });
 
   it("persists and reuses the claude session id across messages", async () => {
@@ -168,6 +196,76 @@ process.stdin.on("end", () => {
     await handleInbound(deps, msg({ ts: "100.2" }));
     expect(posts[1]!.text).toContain("resumed"); // second message resumed the session
     expect(sessions.get("C1")?.messagesProcessed).toBe(2);
+  });
+
+  it("downloads a supported image, caches it, and augments the prompt with its path", async () => {
+    const { deps, posts, invokes, downloads, home } = setup({ trigger: "auto" });
+    await handleInbound(deps, msg({ text: "what is this?", files: [image({ id: "IMG" })] }));
+
+    expect(downloads).toEqual(["IMG"]);
+    expect(invokes).toHaveLength(1);
+    // The prompt carries the caption plus the cached absolute path under the app data dir.
+    expect(invokes[0]!.prompt).toContain("what is this?");
+    expect(invokes[0]!.prompt).toContain(join(home, "media"));
+    expect(invokes[0]!.prompt).toContain("diagram.png");
+    // The file was actually written where the prompt points.
+    const line = invokes[0]!.prompt.split("\n").find((l) => l.includes("diagram.png"))!;
+    const path = line.replace(/^-\s*/, "").trim();
+    expect(readFileSync(path).toString()).toBe("bytes-of-diagram.png");
+    expect(posts[0]!.text).toContain("claude reply");
+  });
+
+  it("invokes on an image-only message (no caption)", async () => {
+    const { deps, invokes } = setup({ trigger: "auto" });
+    await handleInbound(deps, msg({ text: "", files: [image()] }));
+    expect(invokes).toHaveLength(1);
+    expect(invokes[0]!.prompt).toContain("diagram.png");
+  });
+
+  it("posts a not-supported notice and does NOT invoke for an unsupported-only upload", async () => {
+    const { deps, posts, invokes, downloads } = setup({ trigger: "auto" });
+    await handleInbound(
+      deps,
+      msg({
+        text: "",
+        files: [image({ id: "P", name: "report.pdf", mimetype: "application/pdf" })],
+      }),
+    );
+    expect(invokes).toHaveLength(0);
+    expect(downloads).toHaveLength(0);
+    expect(posts).toHaveLength(1);
+    expect(posts[0]!.text).toContain("[auth-investigator]");
+    expect(posts[0]!.text).toContain("not supported");
+    expect(posts[0]!.text).toContain("report.pdf");
+  });
+
+  it("mixed upload: notifies about unsupported files AND invokes with the image", async () => {
+    const { deps, posts, invokes, downloads } = setup({ trigger: "auto" });
+    await handleInbound(
+      deps,
+      msg({
+        text: "review these",
+        files: [
+          image({ id: "OK", name: "ok.png" }),
+          image({ id: "BAD", name: "notes.txt", mimetype: "text/plain" }),
+        ],
+      }),
+    );
+    expect(downloads).toEqual(["OK"]);
+    expect(invokes).toHaveLength(1);
+    expect(invokes[0]!.prompt).toContain("ok.png");
+    const notice = posts.find((p) => p.text.includes("not supported"));
+    expect(notice).toBeDefined();
+    expect(notice!.text).toContain("notes.txt");
+  });
+
+  it("an unsupported-only upload does not create a session", async () => {
+    const { deps, sessions } = setup({ trigger: "auto" });
+    await handleInbound(
+      deps,
+      msg({ text: "", files: [image({ mimetype: "application/pdf", name: "x.pdf" })] }),
+    );
+    expect(sessions.get("C1")).toBeUndefined();
   });
 
   it("serializes concurrent same-key messages so they reuse one session", async () => {

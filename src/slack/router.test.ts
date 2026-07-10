@@ -1,6 +1,14 @@
 import { describe, it, expect } from "vitest";
 import { route, stripMentions, isStatusCommand, InboundMessage } from "./router.js";
+import { SlackFile } from "./files.js";
 import { Mapping } from "../config/types.js";
+
+const image = (): SlackFile => ({
+  id: "F1",
+  name: "shot.png",
+  mimetype: "image/png",
+  urlPrivate: "https://files.slack.com/F1",
+});
 
 const BOT = "<@UBOT>";
 
@@ -11,6 +19,8 @@ function mapping(over: Partial<Mapping> = {}): Mapping {
     workspace: "/repos/auth",
     scope: "channel",
     trigger: "mention",
+    model: "default",
+    skipPermissions: false,
     ...over,
   };
 }
@@ -46,6 +56,31 @@ describe("route — bot/loop safety", () => {
     expect(
       route(mapping(), msg({ fromBot: true, mentionsBot: true, text: `${BOT} status` })).action,
     ).toBe("ignore");
+  });
+});
+
+describe("route — attachments count as content", () => {
+  it("auto trigger: a file-only message (no text) still invokes", () => {
+    const d = route(mapping({ trigger: "auto" }), msg({ text: "", files: [image()] }));
+    expect(d.action).toBe("invoke");
+  });
+
+  it("mention trigger: a file with a mention invokes", () => {
+    const d = route(
+      mapping({ trigger: "mention" }),
+      msg({ mentionsBot: true, text: `${BOT}`, files: [image()] }),
+    );
+    expect(d.action).toBe("invoke");
+  });
+
+  it("mention trigger: a file with NO mention is ignored", () => {
+    const d = route(mapping({ trigger: "mention" }), msg({ text: "", files: [image()] }));
+    expect(d.action).toBe("ignore");
+  });
+
+  it("still ignores an empty message with no attachments", () => {
+    const d = route(mapping({ trigger: "auto" }), msg({ text: "   ", files: [] }));
+    expect(d.action).toBe("ignore");
   });
 });
 

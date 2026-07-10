@@ -32,6 +32,7 @@ oauth_config:
       - groups:history # read private channel messages
       - groups:read # read private channel metadata
       - chat:write # post messages
+      - files:read # download image attachments users upload
 
 settings:
   # Socket Mode — no public inbound endpoint (local-first).

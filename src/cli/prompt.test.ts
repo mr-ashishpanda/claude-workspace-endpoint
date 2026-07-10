@@ -50,6 +50,14 @@ describe("Prompter over piped input", () => {
     p.close();
   });
 
+  it("confirm() honors an explicit default on an empty line", async () => {
+    const p = new Prompter(pipedInput(["", ""]), sink());
+    // Empty answer keeps the given default rather than always falling to false.
+    expect(await p.confirm("keep?", true)).toBe(true);
+    expect(await p.confirm("keep?", false)).toBe(false);
+    p.close();
+  });
+
   it("choose() throws on an invalid choice at EOF with no default", async () => {
     const p = new Prompter(pipedInput(["bogus"]), sink());
     await expect(p.choose("Scope", ["channel", "thread"] as const)).rejects.toThrow(

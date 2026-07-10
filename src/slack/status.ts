@@ -25,11 +25,12 @@ const TRIGGER_LABEL = { mention: "Mention", auto: "Auto" } as const;
  * processed, and creation timestamp (PRD: Slack Commands → @claude status).
  */
 export function formatStatus(mapping: Mapping, session: SessionRecord | undefined): string {
-  const sessionId = session?.claudeSessionId ?? "(not started)";
+  const claudeSessionId = session?.claudeSessionId ?? null;
+  const sessionId = claudeSessionId ?? "(not started)";
   const processed = session?.messagesProcessed ?? 0;
   const started = session ? formatUtc(session.createdAt) : "(not started)";
 
-  return [
+  const lines = [
     identityPrefix(mapping.identity),
     "",
     `Identity: ${mapping.identity}`,
@@ -51,10 +52,27 @@ export function formatStatus(mapping: Mapping, session: SessionRecord | undefine
     "",
     "Started:",
     started,
-  ].join("\n");
+  ];
+
+  // Once a Claude session id exists, show how to continue that exact
+  // conversation locally — the headless session is otherwise "hidden".
+  if (claudeSessionId) {
+    lines.push("", "Resume:", `cd ${mapping.workspace} && claude --resume ${claudeSessionId}`);
+  }
+
+  return lines.join("\n");
 }
 
 /** Prefix arbitrary reply text with the mapping identity tag. */
 export function withIdentity(identity: string, text: string): string {
   return `${identityPrefix(identity)}\n\n${text}`;
+}
+
+/**
+ * A one-time footer, in small (italic) text, shown on the first reply of a
+ * session. Surfaces the identity + Claude session id so a human can resume the
+ * otherwise-hidden headless session (`@claude status` shows the full command).
+ */
+export function sessionStartedFooter(identity: string, claudeSessionId: string): string {
+  return `_${identity} | ${claudeSessionId}_`;
 }
