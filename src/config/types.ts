@@ -6,8 +6,15 @@ export type SessionScope = "channel" | "thread";
 /** Trigger mode: invoke Claude only on @mention, or on every in-scope message. */
 export type TriggerMode = "mention" | "auto";
 
+/**
+ * Model family passed to Claude Code. `default` lets the CLI auto-pick the
+ * latest model; the others select a family whose latest version the CLI resolves.
+ */
+export type ClaudeModel = "default" | "sonnet" | "opus" | "haiku";
+
 export const SESSION_SCOPES: readonly SessionScope[] = ["channel", "thread"];
 export const TRIGGER_MODES: readonly TriggerMode[] = ["mention", "auto"];
+export const CLAUDE_MODELS: readonly ClaudeModel[] = ["default", "sonnet", "opus", "haiku"];
 
 /**
  * A single channel-to-workspace mapping. The `identity` is unique across all
@@ -24,6 +31,16 @@ export interface Mapping {
   scope: SessionScope;
   /** Trigger mode: mention or auto. */
   trigger: TriggerMode;
+  /** Model family for Claude Code invocations (`default` = CLI auto-picks latest). */
+  model: ClaudeModel;
+  /** Pass `--dangerously-skip-permissions` to Claude Code for this workspace. */
+  skipPermissions: boolean;
+  /**
+   * Optional custom `CLAUDE_CONFIG_DIR` for this mapping's `claude -p` runs, for
+   * users who keep a separate Claude config (settings, MCP servers, auth).
+   * Absolute path; omitted ⇒ inherit the bridge process's environment.
+   */
+  claudeConfigDir?: string;
 }
 
 /** Persisted Claude session for one scope key. */
@@ -34,6 +51,12 @@ export interface SessionRecord {
   identity: string;
   /** Claude Code session id, once established by the first invocation. */
   claudeSessionId: string | null;
+  /**
+   * The `CLAUDE_CONFIG_DIR` in effect when `claudeSessionId` was established
+   * (undefined = the bridge's default environment). Claude stores sessions per
+   * config dir, so a session id is only resumable under the same one.
+   */
+  claudeConfigDir?: string;
   /** Number of messages routed to Claude for this session. */
   messagesProcessed: number;
   /** ISO timestamp when the session record was first created. */

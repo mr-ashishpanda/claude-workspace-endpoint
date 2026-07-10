@@ -1,0 +1,6 @@
+Figure out a way to show the session id so that the hidden sdk call sessions can be used for resuming the same session. It should be user experience friendly
+While configuring workspace there should be an option to set or skip dangerously-skip-permissions flag
+an option to configure the model family too like sonnet, opus, etc. while the latest version is auto picked
+Implement image file support allowing users to upload images in slack and for the types that are not supported, send a message indicating that the file type is not supported.
+
+Test and verify after completions

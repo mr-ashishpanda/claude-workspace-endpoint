@@ -1,17 +1,38 @@
 {
   "name": "slack-claude-bridge",
   "version": "0.1.0",
-  "private": true,
-  "description": "Local-first agent bridging Slack with Claude Code, scoped to per-channel workspaces.",
+  "description": "Local-first bridge between Slack and Claude Code, scoped to per-channel workspaces.",
   "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mr-ashishpanda/claude-workspace-endpoint.git"
+  },
+  "homepage": "https://github.com/mr-ashishpanda/claude-workspace-endpoint#readme",
+  "bugs": {
+    "url": "https://github.com/mr-ashishpanda/claude-workspace-endpoint/issues"
+  },
+  "keywords": [
+    "slack",
+    "claude",
+    "claude-code",
+    "bot",
+    "bridge",
+    "socket-mode"
+  ],
   "bin": {
     "slack-claude": "dist/cli/index.js"
   },
+  "files": [
+    "dist",
+    "docs/slack-app-manifest.yml"
+  ],
   "engines": {
     "node": ">=20"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "prepare": "npm run build",
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",

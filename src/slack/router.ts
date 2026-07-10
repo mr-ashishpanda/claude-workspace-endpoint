@@ -1,5 +1,6 @@
 import { Mapping } from "../config/types.js";
 import { MessageContext, replyThreadTs, sessionKey } from "../session/scope.js";
+import { SlackFile } from "./files.js";
 
 /** A normalized inbound Slack message, decoupled from Bolt's event shapes. */
 export interface InboundMessage extends MessageContext {
@@ -9,6 +10,8 @@ export interface InboundMessage extends MessageContext {
   mentionsBot: boolean;
   /** True if the message was produced by a bot (including ourselves). */
   fromBot: boolean;
+  /** File attachments on the message (empty/omitted when none). */
+  files?: SlackFile[];
 }
 
 export type RouteAction = "ignore" | "status" | "invoke";
@@ -66,7 +69,10 @@ export function route(mapping: Mapping, msg: InboundMessage): RouteDecision {
   }
 
   const prompt = mapping.trigger === "mention" ? stripMentions(msg.text) : msg.text;
-  if (!prompt.trim()) return { action: "ignore" };
+  // Attachments are content too: a file-only message (no text) still triggers,
+  // subject to the same mention/auto gating above.
+  const hasAttachments = (msg.files?.length ?? 0) > 0;
+  if (!prompt.trim() && !hasAttachments) return { action: "ignore" };
 
   return {
     action: "invoke",

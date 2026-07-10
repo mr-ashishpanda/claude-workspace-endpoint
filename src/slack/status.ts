@@ -25,11 +25,12 @@ const TRIGGER_LABEL = { mention: "Mention", auto: "Auto" } as const;
  * processed, and creation timestamp (PRD: Slack Commands → @claude status).
  */
 export function formatStatus(mapping: Mapping, session: SessionRecord | undefined): string {
-  const sessionId = session?.claudeSessionId ?? "(not started)";
+  const claudeSessionId = session?.claudeSessionId ?? null;
+  const sessionId = claudeSessionId ?? "(not started)";
   const processed = session?.messagesProcessed ?? 0;
   const started = session ? formatUtc(session.createdAt) : "(not started)";
 
-  return [
+  const lines = [
     identityPrefix(mapping.identity),
     "",
     `Identity: ${mapping.identity}`,
@@ -51,10 +52,27 @@ export function formatStatus(mapping: Mapping, session: SessionRecord | undefine
     "",
     "Started:",
     started,
-  ].join("\n");
+  ];
+
+  // Once a Claude session id exists, show how to continue that exact
+  // conversation locally — the headless session is otherwise "hidden".
+  if (claudeSessionId) {
+    lines.push("", "Resume:", `cd ${mapping.workspace} && claude --resume ${claudeSessionId}`);
+  }
+
+  return lines.join("\n");
 }
 
 /** Prefix arbitrary reply text with the mapping identity tag. */
 export function withIdentity(identity: string, text: string): string {
   return `${identityPrefix(identity)}\n\n${text}`;
+}
+
+/**
+ * Head a Claude answer with `identity | session-id`, so every reply shows both
+ * the mapping identity and the resumable Claude session id in one line (no
+ * separate footer). Used for answers; system notices/errors use withIdentity.
+ */
+export function withSessionHeader(identity: string, claudeSessionId: string, text: string): string {
+  return `${identity} | ${claudeSessionId}\n\n${text}`;
 }

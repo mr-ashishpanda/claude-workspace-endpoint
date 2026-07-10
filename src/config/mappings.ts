@@ -1,6 +1,15 @@
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
-import { Mapping, SESSION_SCOPES, TRIGGER_MODES, SessionScope, TriggerMode } from "./types.js";
+import {
+  Mapping,
+  SESSION_SCOPES,
+  TRIGGER_MODES,
+  CLAUDE_MODELS,
+  SessionScope,
+  TriggerMode,
+  ClaudeModel,
+} from "./types.js";
 import { mappingsPath, resolveHome } from "./paths.js";
 
 export class MappingValidationError extends Error {
@@ -46,7 +55,36 @@ export function validateMapping(input: Partial<Mapping>): Mapping {
     );
   }
 
-  return { identity, channel, workspace, scope, trigger };
+  // New fields default so mappings written before they existed still load.
+  const model = (input.model ?? "default") as ClaudeModel;
+  if (!CLAUDE_MODELS.includes(model)) {
+    throw new MappingValidationError(
+      `Invalid model "${input.model}": expected one of ${CLAUDE_MODELS.join(", ")}.`,
+    );
+  }
+
+  const skipPermissions = input.skipPermissions ?? false;
+
+  // Optional per-mapping CLAUDE_CONFIG_DIR; blank ⇒ unset (inherit environment).
+  // Expand a leading `~` (shell home shorthand users naturally type) before
+  // resolving, since path.resolve treats `~` as a literal directory name.
+  const configDirRaw = input.claudeConfigDir?.trim() ?? "";
+  const configDirExpanded =
+    configDirRaw === "~" || configDirRaw.startsWith("~/")
+      ? resolve(homedir(), configDirRaw.slice(1).replace(/^\/+/, ""))
+      : configDirRaw;
+  const claudeConfigDir = configDirExpanded ? resolve(configDirExpanded) : undefined;
+
+  return {
+    identity,
+    channel,
+    workspace,
+    scope,
+    trigger,
+    model,
+    skipPermissions,
+    ...(claudeConfigDir ? { claudeConfigDir } : {}),
+  };
 }
 
 /**

@@ -30,8 +30,13 @@ let input = "";
 process.stdin.on("data", (d) => (input += d));
 process.stdin.on("end", () => {
   const resume = process.argv.includes("--resume");
+  const modelIdx = process.argv.indexOf("--model");
+  const model = modelIdx >= 0 ? process.argv[modelIdx + 1] : "";
+  const skip = process.argv.includes("--dangerously-skip-permissions");
   const out = {
-    result: "cwd=" + process.cwd() + ";resume=" + resume + ";prompt=" + input.trim(),
+    result:
+      "cwd=" + process.cwd() + ";resume=" + resume + ";model=" + model + ";skip=" + skip +
+      ";cfgdir=" + (process.env.CLAUDE_CONFIG_DIR || "") + ";prompt=" + input.trim(),
     session_id: "stub-session",
   };
   process.stdout.write(JSON.stringify(out));
@@ -78,6 +83,30 @@ describe("invokeClaude with the real process runner", () => {
       resumeSessionId: "stub-session",
     });
     expect(res.text).toContain("resume=true");
+  });
+
+  it("forwards --model and --dangerously-skip-permissions through spawn", async () => {
+    const res = await invokeClaude({
+      bin: okBin,
+      workspace,
+      prompt: "check",
+      resumeSessionId: null,
+      model: "opus",
+      skipPermissions: true,
+    });
+    expect(res.text).toContain("model=opus");
+    expect(res.text).toContain("skip=true");
+  });
+
+  it("sets CLAUDE_CONFIG_DIR in the spawned process env when provided", async () => {
+    const res = await invokeClaude({
+      bin: okBin,
+      workspace,
+      prompt: "check",
+      resumeSessionId: null,
+      claudeConfigDir: "/home/me/.claude-custom",
+    });
+    expect(res.text).toContain("cfgdir=/home/me/.claude-custom");
   });
 
   it("raises ClaudeInvocationError on a non-zero exit", async () => {

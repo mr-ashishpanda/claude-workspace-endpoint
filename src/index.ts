@@ -5,7 +5,9 @@ import { MissingCredentialsError, claudeBin, loadCredentials } from "./config/cr
 import { MappingStore } from "./config/mappings.js";
 import { SessionStore } from "./session/store.js";
 import { KeyedSerializer } from "./session/serializer.js";
+import { MediaStore } from "./session/media.js";
 import { createSlackApp } from "./slack/app.js";
+import { createFileDownloader } from "./slack/download.js";
 
 /** Bridge entrypoint: wire config + stores + Slack app, then run. */
 async function main(): Promise<void> {
@@ -31,10 +33,12 @@ async function main(): Promise<void> {
   }
   const sessions = SessionStore.load(home);
   const serializer = new KeyedSerializer();
+  const media = new MediaStore(home);
+  const download = createFileDownloader(creds.botToken);
 
   const app = createSlackApp(
     creds,
-    { mappings, sessions, logger, claudeBin: claudeBin(), serializer },
+    { mappings, sessions, logger, claudeBin: claudeBin(), serializer, media, download },
     logger,
   );
 
