@@ -111,42 +111,67 @@ export async function handleInbound(deps: HandlerDeps, msg: InboundMessage): Pro
       }
 
       const session = deps.sessions.getOrCreate(key, mapping.identity);
+      const priorId = session.claudeSessionId;
       log.info(
-        `invoking claude in ${mapping.workspace} ` +
-          `(session ${key}, resume=${session.claudeSessionId ?? "new"})`,
+        `invoking claude in ${mapping.workspace} (session ${key}, resume=${priorId ?? "new"})`,
       );
-      try {
-        const result = await invoke({
+
+      const attempt = (resumeSessionId: string | null): Promise<ClaudeResult> =>
+        invoke({
           bin: deps.claudeBin,
           workspace: mapping.workspace,
           prompt,
-          resumeSessionId: session.claudeSessionId,
+          resumeSessionId,
           model: mapping.model,
           skipPermissions: mapping.skipPermissions,
           claudeConfigDir: mapping.claudeConfigDir,
           runner: deps.runner,
         });
-        // First reply of a session: capture the id and advertise it (once) so
-        // the hidden headless session can be resumed by a human.
-        const isFirstReply = result.sessionId != null && !session.claudeSessionId;
-        if (isFirstReply) {
-          deps.sessions.setClaudeSessionId(key, result.sessionId!);
-        }
-        deps.sessions.incrementProcessed(key);
-        const body = isFirstReply
-          ? `${result.text}\n\n${sessionStartedFooter(mapping.identity, result.sessionId!)}`
-          : result.text;
-        await deps.post(msg.channel, withIdentity(mapping.identity, body), decision.replyThreadTs);
-        log.info(`replied to session ${key}`);
+
+      let result: ClaudeResult;
+      try {
+        result = await attempt(priorId);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        log.error(`claude invocation failed: ${message}`);
-        await deps.post(
-          msg.channel,
-          withIdentity(mapping.identity, `:warning: Claude invocation failed: ${message}`),
-          decision.replyThreadTs,
-        );
+        // A stored Claude session id can become unresumable (pruned, or a
+        // different CLAUDE_CONFIG_DIR). Rather than break this scope forever,
+        // retry once with a fresh session. With no prior id, don't retry.
+        if (!priorId) {
+          log.error(`claude invocation failed: ${message}`);
+          await deps.post(
+            msg.channel,
+            withIdentity(mapping.identity, `:warning: Claude invocation failed: ${message}`),
+            decision.replyThreadTs,
+          );
+          return;
+        }
+        log.warn(`resume of ${priorId} failed (${message}); starting a fresh session`);
+        try {
+          result = await attempt(null);
+        } catch (err2) {
+          const message2 = err2 instanceof Error ? err2.message : String(err2);
+          log.error(`claude invocation failed: ${message2}`);
+          await deps.post(
+            msg.channel,
+            withIdentity(mapping.identity, `:warning: Claude invocation failed: ${message2}`),
+            decision.replyThreadTs,
+          );
+          return;
+        }
       }
+
+      // A newly-established id (first reply, or a fresh session after a failed
+      // resume) is stored and advertised once so it can be resumed by a human.
+      const establishedNew = result.sessionId != null && result.sessionId !== priorId;
+      if (establishedNew) {
+        deps.sessions.setClaudeSessionId(key, result.sessionId!);
+      }
+      deps.sessions.incrementProcessed(key);
+      const body = establishedNew
+        ? `${result.text}\n\n${sessionStartedFooter(mapping.identity, result.sessionId!)}`
+        : result.text;
+      await deps.post(msg.channel, withIdentity(mapping.identity, body), decision.replyThreadTs);
+      log.info(`replied to session ${key}`);
     };
 
     await (deps.serializer ? deps.serializer.run(key, runInvocation) : runInvocation());
