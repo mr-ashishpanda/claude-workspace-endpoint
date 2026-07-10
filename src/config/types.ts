@@ -51,6 +51,12 @@ export interface SessionRecord {
   identity: string;
   /** Claude Code session id, once established by the first invocation. */
   claudeSessionId: string | null;
+  /**
+   * The `CLAUDE_CONFIG_DIR` in effect when `claudeSessionId` was established
+   * (undefined = the bridge's default environment). Claude stores sessions per
+   * config dir, so a session id is only resumable under the same one.
+   */
+  claudeConfigDir?: string;
   /** Number of messages routed to Claude for this session. */
   messagesProcessed: number;
   /** ISO timestamp when the session record was first created. */

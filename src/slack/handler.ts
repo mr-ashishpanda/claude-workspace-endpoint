@@ -6,7 +6,7 @@ import { KeyedSerializer } from "../session/serializer.js";
 import { ClaudeResult, ProcessRunner, invokeClaude } from "../claude/invoke.js";
 import { MediaStore } from "../session/media.js";
 import { InboundMessage, route } from "./router.js";
-import { formatStatus, withIdentity, sessionStartedFooter } from "./status.js";
+import { formatStatus, withIdentity } from "./status.js";
 import { SlackFile, partitionFiles, formatUnsupportedNotice, buildImagePrompt } from "./files.js";
 
 /** Posts a reply to Slack. `threadTs` undefined ⇒ post to the channel root. */
@@ -111,7 +111,19 @@ export async function handleInbound(deps: HandlerDeps, msg: InboundMessage): Pro
       }
 
       const session = deps.sessions.getOrCreate(key, mapping.identity);
-      const priorId = session.claudeSessionId;
+      const effectiveConfigDir = mapping.claudeConfigDir;
+      // Claude stores sessions per config dir, so a stored id is only resumable
+      // under the same CLAUDE_CONFIG_DIR it was created with. On a mismatch,
+      // skip the (doomed) resume and start fresh instead of failing.
+      const configMatches = (session.claudeConfigDir ?? undefined) === effectiveConfigDir;
+      const priorId = configMatches ? session.claudeSessionId : null;
+      if (session.claudeSessionId && !configMatches) {
+        log.warn(
+          `config dir for session ${key} changed ` +
+            `(was ${session.claudeConfigDir ?? "default"}, now ${effectiveConfigDir ?? "default"}); ` +
+            `starting a fresh session`,
+        );
+      }
       log.info(
         `invoking claude in ${mapping.workspace} (session ${key}, resume=${priorId ?? "new"})`,
       );
@@ -160,17 +172,21 @@ export async function handleInbound(deps: HandlerDeps, msg: InboundMessage): Pro
         }
       }
 
-      // A newly-established id (first reply, or a fresh session after a failed
-      // resume) is stored and advertised once so it can be resumed by a human.
+      // Store a newly-established id (first reply, or a fresh session after a
+      // failed/skipped resume) together with the config dir it was created
+      // under, so future resumes are attempted only when they can succeed.
       const establishedNew = result.sessionId != null && result.sessionId !== priorId;
       if (establishedNew) {
-        deps.sessions.setClaudeSessionId(key, result.sessionId!);
+        deps.sessions.setClaudeSessionId(key, result.sessionId!, effectiveConfigDir);
       }
       deps.sessions.incrementProcessed(key);
-      const body = establishedNew
-        ? `${result.text}\n\n${sessionStartedFooter(mapping.identity, result.sessionId!)}`
-        : result.text;
-      await deps.post(msg.channel, withIdentity(mapping.identity, body), decision.replyThreadTs);
+      // Reply carries only the identity header — the session id lives in
+      // `@claude status` (with a copy-paste resume command), not every message.
+      await deps.post(
+        msg.channel,
+        withIdentity(mapping.identity, result.text),
+        decision.replyThreadTs,
+      );
       log.info(`replied to session ${key}`);
     };
 

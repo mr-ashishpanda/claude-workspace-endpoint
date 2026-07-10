@@ -63,11 +63,16 @@ export class SessionStore {
     return record;
   }
 
-  /** Record the Claude session id returned by the first invocation. */
-  setClaudeSessionId(key: string, claudeSessionId: string): void {
+  /**
+   * Record the Claude session id (and the config dir it was created under, so a
+   * later resume can be skipped when the config dir no longer matches).
+   */
+  setClaudeSessionId(key: string, claudeSessionId: string, claudeConfigDir?: string): void {
     const record = this.sessions.get(key);
     if (!record) return;
     record.claudeSessionId = claudeSessionId;
+    if (claudeConfigDir) record.claudeConfigDir = claudeConfigDir;
+    else delete record.claudeConfigDir;
     this.persist();
   }
 
