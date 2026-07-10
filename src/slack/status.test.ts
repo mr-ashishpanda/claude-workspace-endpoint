@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatStatus, formatUtc, withIdentity, sessionStartedFooter } from "./status.js";
+import { formatStatus, formatUtc, withIdentity } from "./status.js";
 import { Mapping, SessionRecord } from "../config/types.js";
 
 const mapping: Mapping = {
@@ -62,13 +62,5 @@ describe("formatStatus", () => {
 describe("withIdentity", () => {
   it("prefixes reply text with the identity tag", () => {
     expect(withIdentity("auth-investigator", "hello")).toBe("[auth-investigator]\n\nhello");
-  });
-});
-
-describe("sessionStartedFooter", () => {
-  it("renders identity | session-id in italic small text", () => {
-    expect(sessionStartedFooter("auth-investigator", "sess_9")).toBe(
-      "_auth-investigator | sess_9_",
-    );
   });
 });

@@ -92,9 +92,11 @@ Credentials live only in `.env` (gitignored). Mappings and sessions live as JSON
 - **Image uploads** — attach a PNG, JPEG, GIF, or WebP in a triggering Slack message and the bridge
   downloads it under `SLACK_CLAUDE_HOME/media/` and lets Claude view it. Other file types get a
   "not supported" reply and are skipped.
-- **Resuming a session** — the first reply of each session carries a small `identity | session-id`
-  footer, and `@claude status` prints a ready-to-run `cd <workspace> && claude --resume <id>` command
-  so you can continue the exact conversation locally.
+- **Resuming a session** — replies carry only the identity header; `@claude status` prints the
+  session id plus a ready-to-run `cd <workspace> && claude --resume <id>` command so you can continue
+  the exact conversation locally. A stored session id is bound to the `CLAUDE_CONFIG_DIR` it was
+  created under (Claude stores sessions per config dir); if that changes, the bridge starts a fresh
+  session rather than failing a doomed resume.
 
 ## Run
 

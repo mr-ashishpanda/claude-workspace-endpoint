@@ -56,6 +56,22 @@ describe("SessionStore", () => {
     expect(existsSync(file + ".corrupt")).toBe(true);
   });
 
+  it("records the config dir alongside the claude session id", () => {
+    const store = SessionStore.load(home);
+    store.getOrCreate("C1", "id", fixedNow);
+    store.setClaudeSessionId("C1", "sess_1", "/home/me/.claude-custom");
+    expect(store.get("C1")?.claudeConfigDir).toBe("/home/me/.claude-custom");
+    // Persists across reload.
+    expect(SessionStore.load(home).get("C1")?.claudeConfigDir).toBe("/home/me/.claude-custom");
+  });
+
+  it("stores no config dir when the default was used", () => {
+    const store = SessionStore.load(home);
+    store.getOrCreate("C1", "id", fixedNow);
+    store.setClaudeSessionId("C1", "sess_1");
+    expect(store.get("C1")?.claudeConfigDir).toBeUndefined();
+  });
+
   it("increments processed count", () => {
     const store = SessionStore.load(home);
     store.getOrCreate("C1", "id", fixedNow);

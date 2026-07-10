@@ -67,12 +67,3 @@ export function formatStatus(mapping: Mapping, session: SessionRecord | undefine
 export function withIdentity(identity: string, text: string): string {
   return `${identityPrefix(identity)}\n\n${text}`;
 }
-
-/**
- * A one-time footer, in small (italic) text, shown on the first reply of a
- * session. Surfaces the identity + Claude session id so a human can resume the
- * otherwise-hidden headless session (`@claude status` shows the full command).
- */
-export function sessionStartedFooter(identity: string, claudeSessionId: string): string {
-  return `_${identity} | ${claudeSessionId}_`;
-}

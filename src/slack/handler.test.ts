@@ -88,15 +88,18 @@ describe("handleInbound", () => {
     expect(posts[0]!.threadTs).toBeUndefined();
   });
 
-  it("appends a session-id footer only on the first reply of a session", async () => {
+  it("replies with only the identity header — no session-id footer", async () => {
     const { deps, posts } = setup({ trigger: "auto" });
     await handleInbound(deps, msg({ text: "first" }));
     await handleInbound(deps, msg({ ts: "101.0", text: "second" }));
 
-    // First reply advertises the identity + session id (for resuming), in small text.
-    expect(posts[0]!.text).toContain("auth-investigator | sess_new");
-    // Subsequent replies stay clean.
-    expect(posts[1]!.text).not.toContain("sess_new");
+    // Identity appears once (the header), never repeated as a footer.
+    for (const p of posts) {
+      expect(p.text).toContain("[auth-investigator]");
+      expect(p.text).not.toContain("| sess_new");
+      // Identity token occurs exactly once.
+      expect(p.text.match(/auth-investigator/g)?.length).toBe(1);
+    }
   });
 
   it("recovers from a stale/unresumable session by retrying without --resume", async () => {
@@ -116,12 +119,60 @@ describe("handleInbound", () => {
 
     // Tried the stale id, then retried fresh.
     expect(attempts).toEqual(["stale-id", null]);
-    // Stored id is replaced with the new one; the reply advertises it.
+    // Stored id is replaced with the new one.
     expect(sessions.get("C1")?.claudeSessionId).toBe("brand-new-id");
     expect(posts[0]!.text).toContain("fresh answer");
-    expect(posts[0]!.text).toContain("auth-investigator | brand-new-id");
     // A recovered message still counts as processed.
     expect(sessions.get("C1")?.messagesProcessed).toBe(1);
+  });
+
+  it("does not attempt to resume when the stored config dir no longer matches", async () => {
+    const { deps, sessions, posts } = setup({ trigger: "auto" });
+    // Session was created under a different CLAUDE_CONFIG_DIR than the mapping now uses.
+    sessions.getOrCreate("C1", "auth-investigator");
+    sessions.setClaudeSessionId("C1", "id-from-other-config", "/home/me/.claude-other");
+
+    const attempts: (string | null)[] = [];
+    deps.invoke = async (a) => {
+      attempts.push(a.resumeSessionId);
+      return { text: "ok", sessionId: "id-under-default" };
+    };
+
+    await handleInbound(deps, msg({ text: "hi" }));
+
+    // No doomed resume: went straight to a fresh session (single attempt, null).
+    expect(attempts).toEqual([null]);
+    expect(sessions.get("C1")?.claudeSessionId).toBe("id-under-default");
+    expect(sessions.get("C1")?.claudeConfigDir).toBeUndefined(); // mapping uses default
+    expect(posts[0]!.text).toContain("ok");
+  });
+
+  it("stores the mapping's config dir with a newly-established session", async () => {
+    const mappings = MappingStore.load(home);
+    mappings.add({
+      identity: "cfg-agent",
+      channel: "C1",
+      workspace: "/repos/x",
+      scope: "channel",
+      trigger: "auto",
+      claudeConfigDir: "/home/me/.claude-custom",
+    });
+    const sessions = SessionStore.load(home);
+    const seen: { resume: string | null; cfg?: string }[] = [];
+    const deps: HandlerDeps = {
+      mappings,
+      sessions,
+      logger: new Logger("test", {}),
+      claudeBin: "claude",
+      post: async () => {},
+      invoke: async (a) => {
+        seen.push({ resume: a.resumeSessionId, cfg: a.claudeConfigDir });
+        return { text: "r", sessionId: "s1" };
+      },
+    };
+    await handleInbound(deps, msg({ text: "hi" }));
+    expect(seen[0]!.cfg).toBe("/home/me/.claude-custom");
+    expect(sessions.get("C1")?.claudeConfigDir).toBe("/home/me/.claude-custom");
   });
 
   it("does not retry when there was no session to resume (reports the failure once)", async () => {
