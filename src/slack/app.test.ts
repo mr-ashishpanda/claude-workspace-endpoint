@@ -268,7 +268,7 @@ describe("makeMessageHandler (Bolt glue → chat.postMessage)", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0]!.channel).toBe("C1");
     expect(calls[0]!.thread_ts).toBeUndefined();
-    expect(calls[0]!.text).toContain("[auth-investigator]");
+    expect(calls[0]!.text).toContain("auth-investigator | s1");
     rmSync(home, { recursive: true, force: true });
   });
 

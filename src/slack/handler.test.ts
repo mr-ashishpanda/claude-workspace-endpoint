@@ -83,21 +83,19 @@ describe("handleInbound", () => {
     await handleInbound(deps, msg({ text: "deploy failed" }));
     expect(invokes).toHaveLength(1);
     expect(invokes[0]!.prompt).toBe("deploy failed");
-    expect(posts[0]!.text).toContain("[auth-investigator]");
+    expect(posts[0]!.text).toContain("auth-investigator | sess_new");
     expect(posts[0]!.text).toContain("claude reply");
     expect(posts[0]!.threadTs).toBeUndefined();
   });
 
-  it("replies with only the identity header — no session-id footer", async () => {
+  it("heads every reply with 'identity | session-id' exactly once (no duplicate footer)", async () => {
     const { deps, posts } = setup({ trigger: "auto" });
     await handleInbound(deps, msg({ text: "first" }));
     await handleInbound(deps, msg({ ts: "101.0", text: "second" }));
 
-    // Identity appears once (the header), never repeated as a footer.
     for (const p of posts) {
-      expect(p.text).toContain("[auth-investigator]");
-      expect(p.text).not.toContain("| sess_new");
-      // Identity token occurs exactly once.
+      expect(p.text).toContain("auth-investigator | sess_new");
+      // Identity token occurs exactly once — header only, no separate footer.
       expect(p.text.match(/auth-investigator/g)?.length).toBe(1);
     }
   });
@@ -279,7 +277,7 @@ process.stdin.on("end", () => {
 
     await handleInbound(deps, msg({ ts: "100.1" }));
     expect(sessions.get("C1")?.claudeSessionId).toBe("stub-session");
-    expect(posts[0]!.text).toContain("[auth-investigator]");
+    expect(posts[0]!.text).toContain("auth-investigator | stub-session");
     expect(posts[0]!.text).toContain("fresh");
 
     await handleInbound(deps, msg({ ts: "100.2" }));

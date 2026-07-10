@@ -67,3 +67,12 @@ export function formatStatus(mapping: Mapping, session: SessionRecord | undefine
 export function withIdentity(identity: string, text: string): string {
   return `${identityPrefix(identity)}\n\n${text}`;
 }
+
+/**
+ * Head a Claude answer with `identity | session-id`, so every reply shows both
+ * the mapping identity and the resumable Claude session id in one line (no
+ * separate footer). Used for answers; system notices/errors use withIdentity.
+ */
+export function withSessionHeader(identity: string, claudeSessionId: string, text: string): string {
+  return `${identity} | ${claudeSessionId}\n\n${text}`;
+}
