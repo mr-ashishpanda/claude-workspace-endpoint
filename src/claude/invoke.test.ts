@@ -70,12 +70,18 @@ describe("parseClaudeOutput", () => {
 describe("invokeClaude", () => {
   const fakeRunner = (
     result: { stdout: string; stderr: string; code: number | null },
-    captured: { args?: string[]; cwd?: string; input?: string } = {},
+    captured: {
+      args?: string[];
+      cwd?: string;
+      input?: string;
+      env?: NodeJS.ProcessEnv;
+    } = {},
   ): ProcessRunner => ({
-    async run(_bin, args, cwd, input) {
+    async run(_bin, args, cwd, input, env) {
       captured.args = args;
       captured.cwd = cwd;
       captured.input = input;
+      captured.env = env;
       return result;
     },
   });
@@ -116,6 +122,39 @@ describe("invokeClaude", () => {
     expect(captured.args).toContain("--model");
     expect(captured.args).toContain("opus");
     expect(captured.args).toContain("--dangerously-skip-permissions");
+  });
+
+  it("passes CLAUDE_CONFIG_DIR in the env when claudeConfigDir is set", async () => {
+    const captured: { env?: NodeJS.ProcessEnv } = {};
+    const runner = fakeRunner(
+      { stdout: JSON.stringify({ result: "ok", session_id: "s1" }), stderr: "", code: 0 },
+      captured,
+    );
+    await invokeClaude({
+      bin: "claude",
+      workspace: "/x",
+      prompt: "p",
+      resumeSessionId: null,
+      claudeConfigDir: "/home/me/.claude-custom",
+      runner,
+    });
+    expect(captured.env?.CLAUDE_CONFIG_DIR).toBe("/home/me/.claude-custom");
+  });
+
+  it("leaves env undefined when no claudeConfigDir is set (inherit)", async () => {
+    const captured: { env?: NodeJS.ProcessEnv } = {};
+    const runner = fakeRunner(
+      { stdout: JSON.stringify({ result: "ok", session_id: "s1" }), stderr: "", code: 0 },
+      captured,
+    );
+    await invokeClaude({
+      bin: "claude",
+      workspace: "/x",
+      prompt: "p",
+      resumeSessionId: null,
+      runner,
+    });
+    expect(captured.env).toBeUndefined();
   });
 
   it("throws ClaudeInvocationError on a non-zero exit", async () => {

@@ -78,6 +78,7 @@ async function cmdMapAdd(): Promise<void> {
     const trigger = await p.choose("Trigger mode", TRIGGER_MODES, "mention");
     const model = await p.choose("Model family (default = latest, auto)", CLAUDE_MODELS, "default");
     const skipPermissions = await p.confirm(SKIP_PERMISSIONS_WARNING);
+    const claudeConfigDir = await p.ask("Custom CLAUDE_CONFIG_DIR (blank = bridge default)");
     const mapping = store.add({
       identity,
       channel,
@@ -86,6 +87,7 @@ async function cmdMapAdd(): Promise<void> {
       trigger,
       model,
       skipPermissions,
+      claudeConfigDir,
     });
     process.stdout.write(
       `Added mapping [${mapping.identity}] → ${mapping.workspace} ` +
@@ -112,7 +114,8 @@ function cmdMapList(): void {
         `  scope:       ${m.scope}\n` +
         `  trigger:     ${m.trigger}\n` +
         `  model:       ${m.model}\n` +
-        `  permissions: ${m.skipPermissions ? "skipped (dangerous)" : "enforced"}\n`,
+        `  permissions: ${m.skipPermissions ? "skipped (dangerous)" : "enforced"}\n` +
+        `  config dir:  ${m.claudeConfigDir ?? "(bridge default)"}\n`,
     );
   }
 }
@@ -137,6 +140,10 @@ async function cmdMapEdit(identity: string): Promise<void> {
       current.model,
     );
     const skipPermissions = await p.confirm(SKIP_PERMISSIONS_WARNING, current.skipPermissions);
+    const claudeConfigDir = await p.ask(
+      "Custom CLAUDE_CONFIG_DIR (blank = bridge default)",
+      current.claudeConfigDir,
+    );
     const updated = store.edit(identity, {
       channel,
       workspace,
@@ -144,6 +151,7 @@ async function cmdMapEdit(identity: string): Promise<void> {
       trigger,
       model,
       skipPermissions,
+      claudeConfigDir,
     });
     process.stdout.write(`Updated mapping [${updated.identity}].\n`);
   } finally {

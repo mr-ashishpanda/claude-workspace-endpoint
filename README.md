@@ -80,6 +80,9 @@ node dist/cli/index.js map remove <identity>
   (latest of that family). Passed to `claude` as `--model`.
 - **Skip permissions** — opt in (default off, with a warning) to run `claude` with
   `--dangerously-skip-permissions` for that workspace. Only for trusted workspaces.
+- **Custom `CLAUDE_CONFIG_DIR`** — optionally point this mapping's `claude -p` runs at a separate
+  Claude config directory (its own settings, MCP servers, and auth). Blank inherits the bridge
+  process's environment; `~` is expanded.
 
 Credentials live only in `.env` (gitignored). Mappings and sessions live as JSON under
 `SLACK_CLAUDE_HOME` (default `.slack-claude/`). See `.env.example` for the full variable list.

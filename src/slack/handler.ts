@@ -41,6 +41,7 @@ export interface HandlerDeps {
     resumeSessionId: string | null;
     model?: Mapping["model"];
     skipPermissions?: boolean;
+    claudeConfigDir?: string;
     runner?: ProcessRunner;
   }) => Promise<ClaudeResult>;
 }
@@ -122,6 +123,7 @@ export async function handleInbound(deps: HandlerDeps, msg: InboundMessage): Pro
           resumeSessionId: session.claudeSessionId,
           model: mapping.model,
           skipPermissions: mapping.skipPermissions,
+          claudeConfigDir: mapping.claudeConfigDir,
           runner: deps.runner,
         });
         // First reply of a session: capture the id and advertise it (once) so
