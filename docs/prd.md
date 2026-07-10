@@ -18,40 +18,40 @@ This is a local-first product. No server-side components, coordinators, relays, 
 
 ## In Scope
 
-* Single Slack App
-* Single local agent process
-* Multiple channel mappings
-* Multiple workspace mappings
-* Public Slack channels
-* Private Slack channels
-* Claude Code integration
-* Channel-scoped sessions
-* Thread-scoped sessions
-* Mention-triggered execution
-* Auto-triggered execution
-* Persistent session management
-* CLI-based configuration
-* Claude identity per mapping
-* Slack status command
+- Single Slack App
+- Single local agent process
+- Multiple channel mappings
+- Multiple workspace mappings
+- Public Slack channels
+- Private Slack channels
+- Claude Code integration
+- Channel-scoped sessions
+- Thread-scoped sessions
+- Mention-triggered execution
+- Auto-triggered execution
+- Persistent session management
+- CLI-based configuration
+- Claude identity per mapping
+- Slack status command
 
 ## Out of Scope
 
-* Multiple agent coordination
-* Multi-machine deployments
-* Event relays
-* Hosted services
-* Centralized control plane
-* Repository auto-discovery
-* Vector databases
-* Memory compression
-* Multiple Claude personas
-* Human approval workflows
-* Load balancing
-* Agent orchestration
-* Session summarization
-* Session reset commands
-* Session termination commands
-* Any Slack commands other than `@claude status`
+- Multiple agent coordination
+- Multi-machine deployments
+- Event relays
+- Hosted services
+- Centralized control plane
+- Repository auto-discovery
+- Vector databases
+- Memory compression
+- Multiple Claude personas
+- Human approval workflows
+- Load balancing
+- Agent orchestration
+- Session summarization
+- Session reset commands
+- Session termination commands
+- Any Slack commands other than `@claude status`
 
 ---
 
@@ -74,11 +74,11 @@ Single Local Agent
 
 The local agent owns:
 
-* Slack event processing
-* Session management
-* Workspace routing
-* Claude invocation
-* Slack response publishing
+- Slack event processing
+- Session management
+- Workspace routing
+- Claude invocation
+- Slack response publishing
 
 ---
 
@@ -119,11 +119,11 @@ No additional indexing, memory systems, or repository ingestion are required.
 
 A mapping consists of:
 
-* Claude Identity
-* Slack Channel
-* Workspace Directory
-* Session Scope
-* Trigger Mode
+- Claude Identity
+- Slack Channel
+- Workspace Directory
+- Session Scope
+- Trigger Mode
 
 Example:
 
@@ -147,15 +147,15 @@ Every mapping must have a unique identity.
 
 Examples:
 
-* auth-investigator
-* platform-reviewer
-* backend-assistant
+- auth-investigator
+- platform-reviewer
+- backend-assistant
 
 The identity must be included in:
 
-* Slack responses
-* Logs
-* Status output
+- Slack responses
+- Logs
+- Status output
 
 Example:
 
@@ -180,18 +180,18 @@ channel_id
 
 Behavior:
 
-* One Claude session per Slack channel
-* First triggering message creates session
-* All subsequent messages reuse session
-* Claude responses are posted directly to the channel
-* Responses are not posted as thread replies
+- One Claude session per Slack channel
+- First triggering message creates session
+- All subsequent messages reuse session
+- Claude responses are posted directly to the channel
+- Responses are not posted as thread replies
 
 Use Cases:
 
-* Incidents
-* War rooms
-* Release channels
-* Migration channels
+- Incidents
+- War rooms
+- Release channels
+- Migration channels
 
 ---
 
@@ -205,17 +205,17 @@ channel_id + thread_ts
 
 Behavior:
 
-* One Claude session per Slack thread
-* First triggering message creates session
-* All subsequent thread messages reuse session
-* Claude responses are posted into the same Slack thread
+- One Claude session per Slack thread
+- First triggering message creates session
+- All subsequent thread messages reuse session
+- Claude responses are posted into the same Slack thread
 
 Use Cases:
 
-* Engineering discussions
-* Troubleshooting
-* Design reviews
-* Code reviews
+- Engineering discussions
+- Troubleshooting
+- Design reviews
+- Code reviews
 
 ---
 
@@ -241,8 +241,8 @@ Claude is invoked automatically for every message received within the configured
 
 Examples:
 
-* Every channel message
-* Every thread reply
+- Every channel message
+- Every thread reply
 
 depending on session scope.
 
@@ -281,13 +281,13 @@ Local persistence is acceptable.
 
 Returns:
 
-* Claude Identity
-* Workspace Directory
-* Session Scope
-* Trigger Mode
-* Session Identifier
-* Messages Processed
-* Session Creation Timestamp
+- Claude Identity
+- Workspace Directory
+- Session Scope
+- Trigger Mode
+- Session Identifier
+- Messages Processed
+- Session Creation Timestamp
 
 Example:
 
@@ -327,8 +327,8 @@ slack-claude init
 
 Configure:
 
-* Slack credentials
-* Local storage location
+- Slack credentials
+- Local storage location
 
 ---
 
@@ -340,11 +340,11 @@ slack-claude map add
 
 Interactive prompts:
 
-* Identity
-* Slack Channel
-* Workspace Directory
-* Session Scope
-* Trigger Mode
+- Identity
+- Slack Channel
+- Workspace Directory
+- Session Scope
+- Trigger Mode
 
 ---
 
@@ -378,19 +378,19 @@ slack-claude map remove <identity>
 
 The Slack App must support:
 
-* Public channels
-* Private channels
-* Message reading
-* Message posting
-* App mentions
+- Public channels
+- Private channels
+- Message reading
+- Message posting
+- App mentions
 
 Required capabilities include:
 
-* Read channel history
-* Read private channel history
-* Read channel metadata
-* Post messages
-* Receive app mention events
+- Read channel history
+- Read private channel history
+- Read channel metadata
+- Post messages
+- Receive app mention events
 
 ---
 
