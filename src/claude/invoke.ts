@@ -16,6 +16,8 @@ export interface ProcessRunner {
     args: string[],
     cwd: string,
     input: string,
+    /** Environment for the child; undefined ⇒ inherit the parent process env. */
+    env?: NodeJS.ProcessEnv,
   ): Promise<{ stdout: string; stderr: string; code: number | null }>;
 }
 
@@ -73,11 +75,13 @@ export function parseClaudeOutput(stdout: string): ClaudeResult {
 
 /** Default runner: spawns the real `claude` binary. */
 export const defaultProcessRunner: ProcessRunner = {
-  run(bin, args, cwd, input) {
+  run(bin, args, cwd, input, env) {
     return new Promise((resolvePromise, reject) => {
       const child = spawn(bin, args, {
         cwd,
         stdio: ["pipe", "pipe", "pipe"],
+        // undefined ⇒ child inherits this process's env (spawn default).
+        ...(env ? { env } : {}),
       });
       let stdout = "";
       let stderr = "";
@@ -100,6 +104,8 @@ export interface InvokeOptions {
   model?: ClaudeModel;
   /** Pass `--dangerously-skip-permissions` for this invocation. */
   skipPermissions?: boolean;
+  /** Custom `CLAUDE_CONFIG_DIR` for this invocation; omitted ⇒ inherit env. */
+  claudeConfigDir?: string;
   runner?: ProcessRunner;
 }
 
@@ -124,7 +130,18 @@ export async function invokeClaude(opts: InvokeOptions): Promise<ClaudeResult> {
     model: opts.model,
     skipPermissions: opts.skipPermissions,
   });
-  const { stdout, stderr, code } = await runner.run(opts.bin, args, opts.workspace, opts.prompt);
+  // Only override the child env when a custom config dir is set; otherwise
+  // inherit (undefined) so the bridge's own environment flows through.
+  const env = opts.claudeConfigDir
+    ? { ...process.env, CLAUDE_CONFIG_DIR: opts.claudeConfigDir }
+    : undefined;
+  const { stdout, stderr, code } = await runner.run(
+    opts.bin,
+    args,
+    opts.workspace,
+    opts.prompt,
+    env,
+  );
   if (code !== 0) {
     throw new ClaudeInvocationError(`claude exited with code ${code}`, code, stderr);
   }

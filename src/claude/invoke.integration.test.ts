@@ -36,7 +36,7 @@ process.stdin.on("end", () => {
   const out = {
     result:
       "cwd=" + process.cwd() + ";resume=" + resume + ";model=" + model + ";skip=" + skip +
-      ";prompt=" + input.trim(),
+      ";cfgdir=" + (process.env.CLAUDE_CONFIG_DIR || "") + ";prompt=" + input.trim(),
     session_id: "stub-session",
   };
   process.stdout.write(JSON.stringify(out));
@@ -96,6 +96,17 @@ describe("invokeClaude with the real process runner", () => {
     });
     expect(res.text).toContain("model=opus");
     expect(res.text).toContain("skip=true");
+  });
+
+  it("sets CLAUDE_CONFIG_DIR in the spawned process env when provided", async () => {
+    const res = await invokeClaude({
+      bin: okBin,
+      workspace,
+      prompt: "check",
+      resumeSessionId: null,
+      claudeConfigDir: "/home/me/.claude-custom",
+    });
+    expect(res.text).toContain("cfgdir=/home/me/.claude-custom");
   });
 
   it("raises ClaudeInvocationError on a non-zero exit", async () => {

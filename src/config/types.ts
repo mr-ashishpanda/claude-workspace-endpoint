@@ -35,6 +35,12 @@ export interface Mapping {
   model: ClaudeModel;
   /** Pass `--dangerously-skip-permissions` to Claude Code for this workspace. */
   skipPermissions: boolean;
+  /**
+   * Optional custom `CLAUDE_CONFIG_DIR` for this mapping's `claude -p` runs, for
+   * users who keep a separate Claude config (settings, MCP servers, auth).
+   * Absolute path; omitted ⇒ inherit the bridge process's environment.
+   */
+  claudeConfigDir?: string;
 }
 
 /** Persisted Claude session for one scope key. */

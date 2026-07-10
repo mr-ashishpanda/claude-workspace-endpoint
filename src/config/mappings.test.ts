@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdtempSync, rmSync, existsSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { tmpdir, homedir } from "node:os";
 import { join } from "node:path";
 import { MappingStore, validateMapping, MappingValidationError } from "./mappings.js";
 
@@ -56,6 +56,22 @@ describe("validateMapping", () => {
   it("preserves an explicit skipPermissions=true", () => {
     expect(validateMapping({ ...base, skipPermissions: true }).skipPermissions).toBe(true);
   });
+
+  it("leaves claudeConfigDir undefined when not provided or blank", () => {
+    expect(validateMapping(base).claudeConfigDir).toBeUndefined();
+    expect(validateMapping({ ...base, claudeConfigDir: "   " }).claudeConfigDir).toBeUndefined();
+  });
+
+  it("resolves a provided claudeConfigDir to an absolute path", () => {
+    const m = validateMapping({ ...base, claudeConfigDir: "relative/.claude-custom" });
+    expect(m.claudeConfigDir?.startsWith("/")).toBe(true);
+    expect(m.claudeConfigDir?.endsWith(".claude-custom")).toBe(true);
+  });
+
+  it("expands a leading ~ in claudeConfigDir to the home directory", () => {
+    const m = validateMapping({ ...base, claudeConfigDir: "~/.claude-ashish" });
+    expect(m.claudeConfigDir).toBe(join(homedir(), ".claude-ashish"));
+  });
 });
 
 describe("MappingStore CRUD + persistence", () => {
@@ -101,6 +117,14 @@ describe("MappingStore CRUD + persistence", () => {
     const reloaded = MappingStore.load(home).get("auth-investigator");
     expect(reloaded?.model).toBe("opus");
     expect(reloaded?.skipPermissions).toBe(true);
+  });
+
+  it("round-trips claudeConfigDir", () => {
+    const store = MappingStore.load(home);
+    store.add({ ...base, claudeConfigDir: "/home/me/.claude-custom" });
+    expect(MappingStore.load(home).get("auth-investigator")?.claudeConfigDir).toBe(
+      "/home/me/.claude-custom",
+    );
   });
 
   it("loads legacy mappings without the new fields (defaults applied)", () => {

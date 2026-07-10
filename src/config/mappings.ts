@@ -1,4 +1,5 @@
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
 import {
   Mapping,
@@ -64,7 +65,26 @@ export function validateMapping(input: Partial<Mapping>): Mapping {
 
   const skipPermissions = input.skipPermissions ?? false;
 
-  return { identity, channel, workspace, scope, trigger, model, skipPermissions };
+  // Optional per-mapping CLAUDE_CONFIG_DIR; blank ⇒ unset (inherit environment).
+  // Expand a leading `~` (shell home shorthand users naturally type) before
+  // resolving, since path.resolve treats `~` as a literal directory name.
+  const configDirRaw = input.claudeConfigDir?.trim() ?? "";
+  const configDirExpanded =
+    configDirRaw === "~" || configDirRaw.startsWith("~/")
+      ? resolve(homedir(), configDirRaw.slice(1).replace(/^\/+/, ""))
+      : configDirRaw;
+  const claudeConfigDir = configDirExpanded ? resolve(configDirExpanded) : undefined;
+
+  return {
+    identity,
+    channel,
+    workspace,
+    scope,
+    trigger,
+    model,
+    skipPermissions,
+    ...(claudeConfigDir ? { claudeConfigDir } : {}),
+  };
 }
 
 /**
