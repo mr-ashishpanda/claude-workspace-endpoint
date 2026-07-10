@@ -1,0 +1,38 @@
+name: CI
+
+# Runs on every PR and on merge to master (a merge is a push to master), plus
+# on version tags. Builds, verifies, packs the npm tarball, and uploads it as a
+# downloadable GitHub artifact. Users install the built package with:
+#   npm install github:mr-ashishpanda/claude-workspace-endpoint
+on:
+  push:
+    branches: [master]
+    tags: ["v*"]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      # `npm ci` runs the `prepare` script, which builds dist/. Running the full
+      # gate and an explicit build afterwards keeps failures easy to localize.
+      - run: npm ci
+      - run: npm run verify
+      - run: npm run build
+
+      - name: Pack npm tarball
+        run: npm pack
+
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: slack-claude-bridge-npm-package
+          path: "*.tgz"
+          if-no-files-found: error

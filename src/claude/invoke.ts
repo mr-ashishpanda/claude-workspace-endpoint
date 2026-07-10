@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { ClaudeModel } from "../config/types.js";
 
 /** Result of one Claude Code invocation. */
 export interface ClaudeResult {
@@ -18,17 +19,36 @@ export interface ProcessRunner {
   ): Promise<{ stdout: string; stderr: string; code: number | null }>;
 }
 
+/** Per-mapping knobs that shape the `claude` invocation. */
+export interface ClaudeArgOptions {
+  /** Model family; `default` (or omitted) lets the CLI auto-pick the latest. */
+  model?: ClaudeModel;
+  /** Append `--dangerously-skip-permissions` when true. */
+  skipPermissions?: boolean;
+}
+
 /**
  * Build the `claude` CLI argument list for a non-interactive invocation.
  *
  * The prompt is supplied on stdin (not argv) so arbitrary message text is safe.
  * `--output-format json` gives us the session id and result; `--resume` reuses
  * an existing Claude session so conversation state persists across messages.
+ * `--model` selects a model family (CLI resolves the latest version); a
+ * `default` family adds no flag. `--dangerously-skip-permissions` is opt-in.
  */
-export function buildClaudeArgs(resumeSessionId: string | null): string[] {
+export function buildClaudeArgs(
+  resumeSessionId: string | null,
+  opts: ClaudeArgOptions = {},
+): string[] {
   const args = ["-p", "--output-format", "json"];
   if (resumeSessionId) {
     args.push("--resume", resumeSessionId);
+  }
+  if (opts.model && opts.model !== "default") {
+    args.push("--model", opts.model);
+  }
+  if (opts.skipPermissions) {
+    args.push("--dangerously-skip-permissions");
   }
   return args;
 }
@@ -76,6 +96,10 @@ export interface InvokeOptions {
   workspace: string;
   prompt: string;
   resumeSessionId: string | null;
+  /** Model family for this invocation (`default`/omitted = CLI auto-picks). */
+  model?: ClaudeModel;
+  /** Pass `--dangerously-skip-permissions` for this invocation. */
+  skipPermissions?: boolean;
   runner?: ProcessRunner;
 }
 
@@ -96,7 +120,10 @@ export class ClaudeInvocationError extends Error {
  */
 export async function invokeClaude(opts: InvokeOptions): Promise<ClaudeResult> {
   const runner = opts.runner ?? defaultProcessRunner;
-  const args = buildClaudeArgs(opts.resumeSessionId);
+  const args = buildClaudeArgs(opts.resumeSessionId, {
+    model: opts.model,
+    skipPermissions: opts.skipPermissions,
+  });
   const { stdout, stderr, code } = await runner.run(opts.bin, args, opts.workspace, opts.prompt);
   if (code !== 0) {
     throw new ClaudeInvocationError(`claude exited with code ${code}`, code, stderr);

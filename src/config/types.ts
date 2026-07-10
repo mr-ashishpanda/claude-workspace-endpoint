@@ -6,8 +6,15 @@ export type SessionScope = "channel" | "thread";
 /** Trigger mode: invoke Claude only on @mention, or on every in-scope message. */
 export type TriggerMode = "mention" | "auto";
 
+/**
+ * Model family passed to Claude Code. `default` lets the CLI auto-pick the
+ * latest model; the others select a family whose latest version the CLI resolves.
+ */
+export type ClaudeModel = "default" | "sonnet" | "opus" | "haiku";
+
 export const SESSION_SCOPES: readonly SessionScope[] = ["channel", "thread"];
 export const TRIGGER_MODES: readonly TriggerMode[] = ["mention", "auto"];
+export const CLAUDE_MODELS: readonly ClaudeModel[] = ["default", "sonnet", "opus", "haiku"];
 
 /**
  * A single channel-to-workspace mapping. The `identity` is unique across all
@@ -24,6 +31,10 @@ export interface Mapping {
   scope: SessionScope;
   /** Trigger mode: mention or auto. */
   trigger: TriggerMode;
+  /** Model family for Claude Code invocations (`default` = CLI auto-picks latest). */
+  model: ClaudeModel;
+  /** Pass `--dangerously-skip-permissions` to Claude Code for this workspace. */
+  skipPermissions: boolean;
 }
 
 /** Persisted Claude session for one scope key. */

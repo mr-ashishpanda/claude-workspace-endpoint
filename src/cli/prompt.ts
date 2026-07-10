@@ -71,9 +71,11 @@ export class Prompter {
     }
   }
 
-  /** Yes/no confirmation, defaulting to no. */
-  async confirm(question: string): Promise<boolean> {
-    const answer = (await this.ask(`${question} (y/N)`)).toLowerCase();
+  /** Yes/no confirmation. An empty answer keeps `fallback` (default no). */
+  async confirm(question: string, fallback = false): Promise<boolean> {
+    const hint = fallback ? "(Y/n)" : "(y/N)";
+    const answer = (await this.ask(`${question} ${hint}`)).trim().toLowerCase();
+    if (!answer) return fallback;
     return answer === "y" || answer === "yes";
   }
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { formatStatus, formatUtc, withIdentity } from "./status.js";
+import { formatStatus, formatUtc, withIdentity, sessionStartedFooter } from "./status.js";
 import { Mapping, SessionRecord } from "../config/types.js";
 
 const mapping: Mapping = {
@@ -8,6 +8,8 @@ const mapping: Mapping = {
   workspace: "/repos/auth-service",
   scope: "channel",
   trigger: "auto",
+  model: "default",
+  skipPermissions: false,
 };
 
 describe("formatUtc", () => {
@@ -35,15 +37,38 @@ describe("formatStatus", () => {
     expect(out).toContain("Started:\n2026-06-29 14:10 UTC");
   });
 
+  it("shows a copy-paste resume command in the workspace when a session exists", () => {
+    const session: SessionRecord = {
+      key: "C1",
+      identity: "auth-investigator",
+      claudeSessionId: "sess_12345",
+      messagesProcessed: 1,
+      createdAt: "2026-06-29T14:10:00Z",
+    };
+    const out = formatStatus(mapping, session);
+    expect(out).toContain("Resume:");
+    expect(out).toContain("cd /repos/auth-service && claude --resume sess_12345");
+  });
+
   it("renders gracefully before a session is created", () => {
     const out = formatStatus(mapping, undefined);
     expect(out).toContain("Session ID:\n(not started)");
     expect(out).toContain("Messages Processed:\n0");
+    // No resume command until there's a real session id.
+    expect(out).not.toContain("--resume");
   });
 });
 
 describe("withIdentity", () => {
   it("prefixes reply text with the identity tag", () => {
     expect(withIdentity("auth-investigator", "hello")).toBe("[auth-investigator]\n\nhello");
+  });
+});
+
+describe("sessionStartedFooter", () => {
+  it("renders identity | session-id in italic small text", () => {
+    expect(sessionStartedFooter("auth-investigator", "sess_9")).toBe(
+      "_auth-investigator | sess_9_",
+    );
   });
 });

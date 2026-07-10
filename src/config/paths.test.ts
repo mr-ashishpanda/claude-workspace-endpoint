@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { isAbsolute, join } from "node:path";
-import { resolveHome, mappingsPath, sessionsPath } from "./paths.js";
+import { resolveHome, mappingsPath, sessionsPath, mediaDir } from "./paths.js";
 
 describe("resolveHome", () => {
   it("defaults to an absolute .slack-claude path", () => {
@@ -23,5 +23,11 @@ describe("mappingsPath / sessionsPath", () => {
   it("place files inside the home directory", () => {
     expect(mappingsPath("/home/x")).toBe(join("/home/x", "mappings.json"));
     expect(sessionsPath("/home/x")).toBe(join("/home/x", "sessions.json"));
+  });
+});
+
+describe("mediaDir", () => {
+  it("places downloaded media under <home>/media", () => {
+    expect(mediaDir("/home/x")).toBe(join("/home/x", "media"));
   });
 });

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { mkdtempSync, rmSync, existsSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { MappingStore, validateMapping, MappingValidationError } from "./mappings.js";
@@ -33,6 +33,28 @@ describe("validateMapping", () => {
   it("resolves workspace to an absolute path", () => {
     const m = validateMapping({ ...base, workspace: "relative/dir" });
     expect(m.workspace.startsWith("/")).toBe(true);
+  });
+
+  it("defaults model to 'default' and skipPermissions to false when absent", () => {
+    const m = validateMapping(base);
+    expect(m.model).toBe("default");
+    expect(m.skipPermissions).toBe(false);
+  });
+
+  it("accepts each supported model family", () => {
+    for (const model of ["default", "sonnet", "opus", "haiku"] as const) {
+      expect(validateMapping({ ...base, model }).model).toBe(model);
+    }
+  });
+
+  it("rejects an unknown model family", () => {
+    expect(() => validateMapping({ ...base, model: "gpt" as never })).toThrow(
+      MappingValidationError,
+    );
+  });
+
+  it("preserves an explicit skipPermissions=true", () => {
+    expect(validateMapping({ ...base, skipPermissions: true }).skipPermissions).toBe(true);
   });
 });
 
@@ -71,5 +93,33 @@ describe("MappingStore CRUD + persistence", () => {
     store.add(base);
     store.add({ ...base, identity: "other", channel: "C2" });
     expect(store.forChannel("C1").map((m) => m.identity)).toEqual(["auth-investigator"]);
+  });
+
+  it("round-trips model and skipPermissions", () => {
+    const store = MappingStore.load(home);
+    store.add({ ...base, model: "opus", skipPermissions: true });
+    const reloaded = MappingStore.load(home).get("auth-investigator");
+    expect(reloaded?.model).toBe("opus");
+    expect(reloaded?.skipPermissions).toBe(true);
+  });
+
+  it("loads legacy mappings without the new fields (defaults applied)", () => {
+    const store = MappingStore.load(home);
+    store.add(base);
+    // Simulate a pre-existing file written before the new fields existed.
+    const file = join(home, "mappings.json");
+    const legacy = [
+      {
+        identity: "legacy",
+        channel: "C9",
+        workspace: "/repos/x",
+        scope: "thread",
+        trigger: "mention",
+      },
+    ];
+    writeFileSync(file, JSON.stringify(legacy));
+    const reloaded = MappingStore.load(home).get("legacy");
+    expect(reloaded?.model).toBe("default");
+    expect(reloaded?.skipPermissions).toBe(false);
   });
 });

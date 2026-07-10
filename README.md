@@ -38,15 +38,28 @@ restarts.
 - A Slack app with Socket Mode enabled. Create it from the ready-to-paste manifest at
   [docs/slack-app-manifest.yml](docs/slack-app-manifest.yml) — it sets exactly the scopes and event
   subscriptions the PRD requires (`channels:history`/`groups:history`, `channels:read`/`groups:read`,
-  `chat:write`, `app_mentions:read`; events `message.channels`, `message.groups`, `app_mention`). The
-  manifest's header lists the steps to obtain the bot token, app-level token, and signing secret.
+  `chat:write`, `app_mentions:read`, `files:read`; events `message.channels`, `message.groups`,
+  `app_mention`). The manifest's header lists the steps to obtain the bot token, app-level token, and
+  signing secret.
 
 ## Install
+
+Install the published package straight from GitHub (it builds itself on install), which puts the
+`slack-claude` CLI on your `PATH`:
+
+```bash
+npm install -g github:mr-ashishpanda/claude-workspace-endpoint
+slack-claude init
+```
+
+Or work from a clone:
 
 ```bash
 npm install
 npm run build
 ```
+
+When installed globally, use `slack-claude <cmd>`; from a clone, use `node dist/cli/index.js <cmd>`.
 
 ## Configure
 
@@ -61,8 +74,24 @@ node dist/cli/index.js map edit <identity>
 node dist/cli/index.js map remove <identity>
 ```
 
+`map add`/`map edit` also prompt for two per-mapping options:
+
+- **Model family** — `default` (the CLI auto-picks the latest model), or `sonnet`/`opus`/`haiku`
+  (latest of that family). Passed to `claude` as `--model`.
+- **Skip permissions** — opt in (default off, with a warning) to run `claude` with
+  `--dangerously-skip-permissions` for that workspace. Only for trusted workspaces.
+
 Credentials live only in `.env` (gitignored). Mappings and sessions live as JSON under
 `SLACK_CLAUDE_HOME` (default `.slack-claude/`). See `.env.example` for the full variable list.
+
+## Images and sessions
+
+- **Image uploads** — attach a PNG, JPEG, GIF, or WebP in a triggering Slack message and the bridge
+  downloads it under `SLACK_CLAUDE_HOME/media/` and lets Claude view it. Other file types get a
+  "not supported" reply and are skipped.
+- **Resuming a session** — the first reply of each session carries a small `identity | session-id`
+  footer, and `@claude status` prints a ready-to-run `cd <workspace> && claude --resume <id>` command
+  so you can continue the exact conversation locally.
 
 ## Run
 

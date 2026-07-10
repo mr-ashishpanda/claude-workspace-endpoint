@@ -1,6 +1,14 @@
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import { Mapping, SESSION_SCOPES, TRIGGER_MODES, SessionScope, TriggerMode } from "./types.js";
+import {
+  Mapping,
+  SESSION_SCOPES,
+  TRIGGER_MODES,
+  CLAUDE_MODELS,
+  SessionScope,
+  TriggerMode,
+  ClaudeModel,
+} from "./types.js";
 import { mappingsPath, resolveHome } from "./paths.js";
 
 export class MappingValidationError extends Error {
@@ -46,7 +54,17 @@ export function validateMapping(input: Partial<Mapping>): Mapping {
     );
   }
 
-  return { identity, channel, workspace, scope, trigger };
+  // New fields default so mappings written before they existed still load.
+  const model = (input.model ?? "default") as ClaudeModel;
+  if (!CLAUDE_MODELS.includes(model)) {
+    throw new MappingValidationError(
+      `Invalid model "${input.model}": expected one of ${CLAUDE_MODELS.join(", ")}.`,
+    );
+  }
+
+  const skipPermissions = input.skipPermissions ?? false;
+
+  return { identity, channel, workspace, scope, trigger, model, skipPermissions };
 }
 
 /**

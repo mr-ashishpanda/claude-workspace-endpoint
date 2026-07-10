@@ -19,3 +19,12 @@ export function mappingsPath(home: string): string {
 export function sessionsPath(home: string): string {
   return resolve(home, "sessions.json");
 }
+
+/**
+ * Directory under the storage root where Slack image downloads are cached, so
+ * headless `claude` can read them by absolute path. Local-first: app data dir,
+ * never the mapped workspace/repo.
+ */
+export function mediaDir(home: string): string {
+  return resolve(home, "media");
+}
