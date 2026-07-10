@@ -99,6 +99,44 @@ describe("handleInbound", () => {
     expect(posts[1]!.text).not.toContain("sess_new");
   });
 
+  it("recovers from a stale/unresumable session by retrying without --resume", async () => {
+    const { deps, sessions, posts } = setup({ trigger: "auto" });
+    // Seed a session whose stored Claude id is no longer resumable.
+    sessions.getOrCreate("C1", "auth-investigator");
+    sessions.setClaudeSessionId("C1", "stale-id");
+
+    const attempts: (string | null)[] = [];
+    deps.invoke = async (a) => {
+      attempts.push(a.resumeSessionId);
+      if (a.resumeSessionId) throw new Error("claude exited with code 1"); // stale resume fails
+      return { text: "fresh answer", sessionId: "brand-new-id" };
+    };
+
+    await handleInbound(deps, msg({ text: "hello again" }));
+
+    // Tried the stale id, then retried fresh.
+    expect(attempts).toEqual(["stale-id", null]);
+    // Stored id is replaced with the new one; the reply advertises it.
+    expect(sessions.get("C1")?.claudeSessionId).toBe("brand-new-id");
+    expect(posts[0]!.text).toContain("fresh answer");
+    expect(posts[0]!.text).toContain("auth-investigator | brand-new-id");
+    // A recovered message still counts as processed.
+    expect(sessions.get("C1")?.messagesProcessed).toBe(1);
+  });
+
+  it("does not retry when there was no session to resume (reports the failure once)", async () => {
+    const { deps, posts } = setup({ trigger: "auto" });
+    let calls = 0;
+    deps.invoke = async () => {
+      calls += 1;
+      throw new Error("spawn claude ENOENT");
+    };
+    await handleInbound(deps, msg({ text: "do it" }));
+    expect(calls).toBe(1); // no fresh-retry when there was no resume id
+    expect(posts).toHaveLength(1);
+    expect(posts[0]!.text).toContain(":warning:");
+  });
+
   it("persists and reuses the claude session id across messages", async () => {
     const { deps, sessions, invokes } = setup({ trigger: "auto" });
     await handleInbound(deps, msg());
