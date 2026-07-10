@@ -6,7 +6,7 @@ import { KeyedSerializer } from "../session/serializer.js";
 import { ClaudeResult, ProcessRunner, invokeClaude } from "../claude/invoke.js";
 import { MediaStore } from "../session/media.js";
 import { InboundMessage, route } from "./router.js";
-import { formatStatus, withIdentity } from "./status.js";
+import { formatStatus, withIdentity, withSessionHeader } from "./status.js";
 import { SlackFile, partitionFiles, formatUnsupportedNotice, buildImagePrompt } from "./files.js";
 
 /** Posts a reply to Slack. `threadTs` undefined ⇒ post to the channel root. */
@@ -180,13 +180,13 @@ export async function handleInbound(deps: HandlerDeps, msg: InboundMessage): Pro
         deps.sessions.setClaudeSessionId(key, result.sessionId!, effectiveConfigDir);
       }
       deps.sessions.incrementProcessed(key);
-      // Reply carries only the identity header — the session id lives in
-      // `@claude status` (with a copy-paste resume command), not every message.
-      await deps.post(
-        msg.channel,
-        withIdentity(mapping.identity, result.text),
-        decision.replyThreadTs,
-      );
+      // Head the reply with `identity | session-id` so the resumable session is
+      // visible on every answer. Fall back to the plain identity tag if Claude
+      // returned no session id (rare).
+      const body = result.sessionId
+        ? withSessionHeader(mapping.identity, result.sessionId, result.text)
+        : withIdentity(mapping.identity, result.text);
+      await deps.post(msg.channel, body, decision.replyThreadTs);
       log.info(`replied to session ${key}`);
     };
 
