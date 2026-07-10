@@ -14,13 +14,13 @@
 # and what the bridge uses — nothing more (least privilege).
 
 display_information:
-  name: Claude Bridge
+  name: CWE Bot
   description: Local-first bridge between Slack and Claude Code.
   background_color: "#1a1a1a"
 
 features:
   bot_user:
-    display_name: claude
+    display_name: CWE Bot
     always_online: true
 
 oauth_config:
