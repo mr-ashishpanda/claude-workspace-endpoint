@@ -59,19 +59,20 @@ npm install
 npm run build
 ```
 
-When installed globally, use `slack-claude <cmd>`; from a clone, use `node dist/cli/index.js <cmd>`.
+When installed globally, use `slack-claude <cmd>` from any directory; from a clone, use
+`node dist/cli/index.js <cmd>` (or the `npm run` scripts below).
 
 ## Configure
 
 ```bash
-# Write Slack credentials + storage location to .env (interactive)
-node dist/cli/index.js init
+# Write Slack credentials + storage location to your per-user config (interactive)
+slack-claude init
 
 # Add channel→workspace mappings (interactive)
-node dist/cli/index.js map add
-node dist/cli/index.js map list
-node dist/cli/index.js map edit <identity>
-node dist/cli/index.js map remove <identity>
+slack-claude map add
+slack-claude map list
+slack-claude map edit <identity>
+slack-claude map remove <identity>
 ```
 
 `map add`/`map edit` also prompt for two per-mapping options:
@@ -84,8 +85,21 @@ node dist/cli/index.js map remove <identity>
   Claude config directory (its own settings, MCP servers, and auth). Blank inherits the bridge
   process's environment; `~` is expanded.
 
-Credentials live only in `.env` (gitignored). Mappings and sessions live as JSON under
-`SLACK_CLAUDE_HOME` (default `.slack-claude/`). See `.env.example` for the full variable list.
+### Where things live
+
+Installed as a CLI, the bridge stores everything in per-user directories, so it behaves the same
+no matter which directory you launch it from (no `.env` in the current directory required):
+
+| Purpose                     | Linux (XDG)                         | macOS                                         | Windows                             |
+| --------------------------- | ----------------------------------- | --------------------------------------------- | ----------------------------------- |
+| Credentials (`.env`)        | `~/.config/slack-claude/`           | `~/Library/Application Support/slack-claude/` | `%APPDATA%\slack-claude\Config\`    |
+| Mappings + sessions + media | `~/.local/state/slack-claude/`      | `~/Library/Application Support/slack-claude/` | `%LOCALAPPDATA%\slack-claude\Data\` |
+| Log file                    | `~/.local/state/slack-claude/logs/` | `~/Library/Logs/slack-claude/`                | `%LOCALAPPDATA%\slack-claude\Log\`  |
+
+Overrides: `SLACK_CLAUDE_HOME` relocates the storage root and `LOG_FILE` the log file. Any real
+environment variable, or a project-local `.env` (handy when developing from a clone), takes
+precedence over the per-user config `.env`. See `.env.example` for the full variable list.
+Credentials are only ever read from the environment and never logged or written to bridge storage.
 
 ## Images and sessions
 
@@ -101,10 +115,20 @@ Credentials live only in `.env` (gitignored). Mappings and sessions live as JSON
 
 ## Run
 
+Installed as a CLI:
+
 ```bash
-npm run dev     # tsx watch (development)
-npm start       # node dist/index.js (built)
-npm run bridge:logs   # tail logs/bridge.log
+slack-claude run      # start the bridge (alias: slack-claude start)
+slack-claude logs     # print the recent bridge log
+slack-claude logs -f  # follow the log (cross-platform; no `tail` needed)
+```
+
+From a clone (development):
+
+```bash
+npm run dev           # tsx watch
+npm start             # node dist/index.js (built)
+npm run bridge:logs   # follow the log via the CLI
 ```
 
 Invite the bot to a mapped channel, then message it. In a channel with `@claude status`, the bridge

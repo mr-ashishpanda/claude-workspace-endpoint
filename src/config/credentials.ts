@@ -9,7 +9,7 @@ export class MissingCredentialsError extends Error {
   constructor(public readonly missing: string[]) {
     super(
       `Missing required Slack credentials: ${missing.join(", ")}. ` +
-        `Set them in .env (see .env.example) or run \`slack-claude init\`.`,
+        "Run `slack-claude init` to configure them, or set them in your environment.",
     );
     this.name = "MissingCredentialsError";
   }

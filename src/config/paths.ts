@@ -1,13 +1,20 @@
 import { resolve } from "node:path";
+import { platformDirs } from "./platform.js";
 
 /**
- * Resolve the local storage root (SLACK_CLAUDE_HOME). All bridge runtime
- * state — mappings and sessions — lives here. Local-first: never a remote
- * location. Defaults to `.slack-claude/` in the current working directory.
+ * Resolve the local storage root for bridge runtime state — mappings, sessions,
+ * and cached media. Local-first: never a remote location.
+ *
+ * Resolution order:
+ *   1. `SLACK_CLAUDE_HOME` if set (explicit override; also how dev pins storage
+ *      to a project-local `.slack-claude/`).
+ *   2. Otherwise the per-user, platform-appropriate data directory so the tool
+ *      works the same no matter which directory it is launched from.
  */
 export function resolveHome(env: NodeJS.ProcessEnv = process.env): string {
-  const home = env.SLACK_CLAUDE_HOME?.trim() || ".slack-claude";
-  return resolve(home);
+  const override = env.SLACK_CLAUDE_HOME?.trim();
+  if (override) return resolve(override);
+  return platformDirs(env).data;
 }
 
 /** Path to the mappings file inside the storage root. */
