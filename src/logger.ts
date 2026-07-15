@@ -1,5 +1,10 @@
-import { appendFileSync, mkdirSync } from "node:fs";
-import { dirname } from "node:path";
+import {
+  DEFAULT_LOG_MAX_FILES,
+  DEFAULT_LOG_MAX_SIZE,
+  getFileSink,
+  parseByteLimit,
+  RotatingFileSink,
+} from "./log-sink.js";
 
 export type LogLevel = "debug" | "info" | "warn" | "error";
 
@@ -25,7 +30,7 @@ function configuredLevel(env: NodeJS.ProcessEnv): LogLevel {
  */
 export class Logger {
   private readonly level: LogLevel;
-  private readonly file: string | undefined;
+  private readonly sink: RotatingFileSink | undefined;
 
   private readonly env: NodeJS.ProcessEnv;
 
@@ -35,13 +40,12 @@ export class Logger {
   ) {
     this.env = env;
     this.level = configuredLevel(env);
-    this.file = env.LOG_FILE?.trim() || undefined;
-    if (this.file) {
-      try {
-        mkdirSync(dirname(this.file), { recursive: true });
-      } catch {
-        // Best effort; fall back to console-only if the dir can't be made.
-      }
+    const file = env.LOG_FILE?.trim();
+    if (file) {
+      const maxSize = parseByteLimit(env.LOG_MAX_SIZE, DEFAULT_LOG_MAX_SIZE);
+      const maxFiles = parseByteLimit(env.LOG_MAX_FILES, DEFAULT_LOG_MAX_FILES);
+      // Shared per-path so all identity-scoped loggers rotate one file together.
+      this.sink = getFileSink(file, maxSize, maxFiles);
     }
   }
 
@@ -72,13 +76,7 @@ export class Logger {
     } else {
       console.log(line);
     }
-    if (this.file) {
-      try {
-        appendFileSync(this.file, line + "\n");
-      } catch {
-        // Never let logging crash the bridge.
-      }
-    }
+    this.sink?.append(line);
   }
 }
 
