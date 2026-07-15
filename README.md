@@ -96,6 +96,9 @@ no matter which directory you launch it from (no `.env` in the current directory
 | Mappings + sessions + media | `~/.local/state/slack-claude/`      | `~/Library/Application Support/slack-claude/` | `%LOCALAPPDATA%\slack-claude\Data\` |
 | Log file                    | `~/.local/state/slack-claude/logs/` | `~/Library/Logs/slack-claude/`                | `%LOCALAPPDATA%\slack-claude\Log\`  |
 
+The log file rotates automatically once it passes `LOG_MAX_SIZE` (default 5 MiB), keeping
+`LOG_MAX_FILES` archives (default 5) as `bridge.log.1 … .N`, so on-disk history stays bounded.
+
 Overrides: `SLACK_CLAUDE_HOME` relocates the storage root and `LOG_FILE` the log file. Any real
 environment variable, or a project-local `.env` (handy when developing from a clone), takes
 precedence over the per-user config `.env`. See `.env.example` for the full variable list.
