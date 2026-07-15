@@ -3,10 +3,10 @@ import { isAbsolute, join } from "node:path";
 import { resolveHome, mappingsPath, sessionsPath, mediaDir } from "./paths.js";
 
 describe("resolveHome", () => {
-  it("defaults to an absolute .slack-claude path", () => {
+  it("defaults to an absolute per-user data directory", () => {
     const home = resolveHome({});
     expect(isAbsolute(home)).toBe(true);
-    expect(home.endsWith(".slack-claude")).toBe(true);
+    expect(home.endsWith("slack-claude")).toBe(true);
   });
 
   it("honors SLACK_CLAUDE_HOME and resolves it to absolute", () => {
@@ -14,8 +14,8 @@ describe("resolveHome", () => {
     expect(home).toBe("/var/lib/scb");
   });
 
-  it("ignores a blank override", () => {
-    expect(resolveHome({ SLACK_CLAUDE_HOME: "   " }).endsWith(".slack-claude")).toBe(true);
+  it("ignores a blank override, falling back to the per-user data directory", () => {
+    expect(resolveHome({ SLACK_CLAUDE_HOME: "   " }).endsWith("slack-claude")).toBe(true);
   });
 });
 
