@@ -1,9 +1,12 @@
 import bolt from "@slack/bolt";
+import { hostname } from "node:os";
 import { Logger } from "../logger.js";
 import { SlackCredentials } from "../config/credentials.js";
+import { Mapping } from "../config/types.js";
 import { HandlerDeps, handleInbound } from "./handler.js";
 import { InboundMessage } from "./router.js";
 import { SlackFile } from "./files.js";
+import { withIdentity } from "./status.js";
 
 const { App } = bolt;
 
@@ -148,6 +151,11 @@ export interface SlackPostClient {
   chat: {
     postMessage(args: { channel: string; text: string; thread_ts?: string }): Promise<unknown>;
   };
+  /** Absent in older test fakes; reactions are skipped when not provided. */
+  reactions?: {
+    add(args: { channel: string; timestamp: string; name: string }): Promise<unknown>;
+    remove(args: { channel: string; timestamp: string; name: string }): Promise<unknown>;
+  };
 }
 
 /**
@@ -156,7 +164,7 @@ export interface SlackPostClient {
  * `client.web` shape is injected so this glue is testable without a connection.
  */
 export function makeMessageHandler(
-  deps: Omit<HandlerDeps, "post">,
+  deps: Omit<HandlerDeps, "post" | "react">,
   getBotUserId: () => string,
 ): (message: RawMessage, client: SlackPostClient) => Promise<void> {
   return async (message, client) => {
@@ -169,8 +177,49 @@ export function makeMessageHandler(
         ...(threadTs ? { thread_ts: threadTs } : {}),
       });
     };
-    await handleInbound({ ...deps, post }, msg);
+    const react: HandlerDeps["react"] = client.reactions
+      ? {
+          add: async (channel, ts, emoji) => {
+            await client.reactions!.add({ channel, timestamp: ts, name: emoji });
+          },
+          remove: async (channel, ts, emoji) => {
+            await client.reactions!.remove({ channel, timestamp: ts, name: emoji });
+          },
+        }
+      : undefined;
+    await handleInbound({ ...deps, post, react }, msg);
   };
+}
+
+/**
+ * Post a "ready" notice — identity-prefixed, naming the host it's running on —
+ * to every mapped channel once the bridge is connected, so operators watching
+ * Slack (not just `bridge.log`) can see it came up. Best-effort per mapping: a
+ * bad/un-invited channel here shouldn't stop the bridge from starting (this is
+ * exactly the class of error `map add`'s live channel check now catches ahead
+ * of time, but existing mappings created before that check still deserve a
+ * clear log line here rather than a crash).
+ */
+export async function notifyStartup(
+  client: SlackPostClient,
+  mappings: Mapping[],
+  logger: Logger,
+  host: string = hostname(),
+): Promise<void> {
+  const text = `bridge started and is ready to receive messages from \`${host}\`.`;
+  for (const mapping of mappings) {
+    try {
+      await client.chat.postMessage({
+        channel: mapping.channel,
+        text: withIdentity(mapping.identity, text),
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      logger
+        .withIdentity(mapping.identity)
+        .warn(`failed to post startup notice to ${mapping.channel}: ${message}`);
+    }
+  }
 }
 
 /**
@@ -216,6 +265,7 @@ export function createSlackApp(
       logger.info(
         `routing ${deps.mappings.list().length} mapping(s) across ` + `${channels.size} channel(s)`,
       );
+      await notifyStartup(app.client, deps.mappings.list(), logger);
     },
     async stop() {
       await app.stop();

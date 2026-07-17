@@ -1,12 +1,18 @@
 #!/usr/bin/env node
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
+import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { runBridge } from "../bridge.js";
 import { configEnvPath, loadEnv } from "../config/env.js";
 import { platformDirs } from "../config/platform.js";
+import { MissingCredentialsError, loadCredentials } from "../config/credentials.js";
 import { MappingStore, MappingValidationError } from "../config/mappings.js";
 import { resolveHome } from "../config/paths.js";
 import { SESSION_SCOPES, TRIGGER_MODES, CLAUDE_MODELS } from "../config/types.js";
+import { readRunningPid } from "../daemon/pidfile.js";
+import { waitForReady } from "../daemon/wait-for-ready.js";
+import { checkChannelAccess } from "../slack/channel-check.js";
 import { Prompter } from "./prompt.js";
 import { runLogs } from "./logs.js";
 
@@ -21,7 +27,8 @@ function usage(): void {
       "",
       "Usage:",
       "  slack-claude init                 Configure Slack credentials + storage",
-      "  slack-claude run                  Start the bridge (alias: start)",
+      "  slack-claude run                  Start the bridge in the background (alias: start)",
+      "  slack-claude stop                 Stop the background bridge",
       "  slack-claude logs [-f]            Show the bridge log (-f to follow)",
       "  slack-claude map add              Add a channel→workspace mapping",
       "  slack-claude map list             List configured mappings",
@@ -75,12 +82,50 @@ async function cmdInit(): Promise<void> {
   }
 }
 
+/** Bot token for live channel checks, or null when credentials aren't configured yet. */
+function tryLoadBotToken(): string | null {
+  try {
+    return loadCredentials().botToken;
+  } catch (err) {
+    if (err instanceof MissingCredentialsError) return null;
+    throw err;
+  }
+}
+
+/**
+ * Prompt for a Slack channel id and, when credentials are available, verify
+ * the bot can actually see it before accepting the answer — looping on
+ * failure so a typo'd/wrong/un-invited channel is caught immediately instead
+ * of silently dropping every future Slack event for that mapping.
+ */
+async function promptChannel(
+  p: Prompter,
+  botToken: string | null,
+  fallback?: string,
+): Promise<string> {
+  for (;;) {
+    const channel = await p.ask("Slack channel id (e.g. C0123ABCD)", fallback);
+    if (!botToken) return channel;
+    const result = await checkChannelAccess(botToken, channel);
+    if (result.ok) return channel;
+    process.stdout.write(
+      `  ✗ Channel check failed: ${result.error}\n  Fix the channel id and try again.\n`,
+    );
+  }
+}
+
 async function cmdMapAdd(): Promise<void> {
   const store = MappingStore.load(resolveHome());
+  const botToken = tryLoadBotToken();
+  if (!botToken) {
+    process.stdout.write(
+      "  (Skipping live channel validation — Slack credentials not configured; run `slack-claude init`.)\n",
+    );
+  }
   const p = new Prompter();
   try {
     const identity = await p.ask("Identity (e.g. auth-investigator)");
-    const channel = await p.ask("Slack channel id (e.g. C0123ABCD)");
+    const channel = await promptChannel(p, botToken);
     const workspace = await p.ask("Workspace directory (absolute path)");
     const scope = await p.choose("Session scope", SESSION_SCOPES, "channel");
     const trigger = await p.choose("Trigger mode", TRIGGER_MODES, "mention");
@@ -136,9 +181,15 @@ async function cmdMapEdit(identity: string): Promise<void> {
     process.exitCode = 1;
     return;
   }
+  const botToken = tryLoadBotToken();
+  if (!botToken) {
+    process.stdout.write(
+      "  (Skipping live channel validation — Slack credentials not configured; run `slack-claude init`.)\n",
+    );
+  }
   const p = new Prompter();
   try {
-    const channel = await p.ask("Slack channel id", current.channel);
+    const channel = await promptChannel(p, botToken, current.channel);
     const workspace = await p.ask("Workspace directory", current.workspace);
     const scope = await p.choose("Session scope", SESSION_SCOPES, current.scope);
     const trigger = await p.choose("Trigger mode", TRIGGER_MODES, current.trigger);
@@ -188,6 +239,64 @@ async function cmdMapRemove(identity: string): Promise<void> {
   }
 }
 
+/**
+ * Run inside the detached background child: actually run the bridge and
+ * report readiness/failure back to the launching `slack-claude run` over IPC.
+ */
+async function cmdRunChild(): Promise<void> {
+  await runBridge({
+    onReady: (pid) => process.send?.({ type: "ready", pid }),
+    onFatal: (message) => process.send?.({ type: "error", message }),
+  });
+}
+
+/**
+ * `slack-claude run`: spawn a detached copy of this same CLI in child mode,
+ * wait for it to report it's connected to Slack, then exit — the child keeps
+ * running independent of this shell (and its terminal) until `slack-claude
+ * stop` or a machine reboot.
+ */
+async function cmdRunDaemon(): Promise<void> {
+  const home = resolveHome();
+  const existingPid = readRunningPid(home);
+  if (existingPid) {
+    process.stdout.write(
+      `Bridge already running (pid ${existingPid}). Run \`slack-claude stop\` first.\n`,
+    );
+    return;
+  }
+
+  const entry = fileURLToPath(import.meta.url);
+  const child = spawn(process.execPath, [entry, "run", "--internal-child"], {
+    detached: true,
+    stdio: ["ignore", "ignore", "ignore", "ipc"],
+  });
+
+  const result = await waitForReady(child);
+  if (result.ok) {
+    process.stdout.write(
+      `Bridge started in the background (pid ${result.pid}).\n` +
+        "Use `slack-claude logs -f` to tail output, `slack-claude stop` to stop it.\n",
+    );
+    child.disconnect();
+    child.unref();
+  } else {
+    process.stderr.write(`Bridge failed to start: ${result.message}\n`);
+    process.exitCode = 1;
+  }
+}
+
+function cmdStop(): void {
+  const home = resolveHome();
+  const pid = readRunningPid(home);
+  if (!pid) {
+    process.stdout.write("Bridge is not running.\n");
+    return;
+  }
+  process.kill(pid, "SIGTERM");
+  process.stdout.write(`Sent stop signal to bridge (pid ${pid}).\n`);
+}
+
 async function main(): Promise<void> {
   const [cmd, sub, arg] = process.argv.slice(2);
 
@@ -199,7 +308,10 @@ async function main(): Promise<void> {
     if (cmd === "init") {
       await cmdInit();
     } else if (cmd === "run" || cmd === "start") {
-      await runBridge();
+      if (sub === "--internal-child") await cmdRunChild();
+      else await cmdRunDaemon();
+    } else if (cmd === "stop") {
+      cmdStop();
     } else if (cmd === "logs") {
       runLogs(sub === "-f" || sub === "--follow");
     } else if (cmd === "map") {

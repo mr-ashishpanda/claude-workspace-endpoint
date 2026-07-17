@@ -10,13 +10,21 @@ import { KeyedSerializer } from "./session/serializer.js";
 import { MediaStore } from "./session/media.js";
 import { createSlackApp } from "./slack/app.js";
 import { createFileDownloader } from "./slack/download.js";
+import { removePidFile, writePidFile } from "./daemon/pidfile.js";
+
+export interface RunBridgeOptions {
+  /** Called once the bridge is connected to Slack and ready to route messages. */
+  onReady?: (pid: number) => void;
+  /** Called when startup fails before the bridge ever connects. */
+  onFatal?: (message: string) => void;
+}
 
 /**
  * Start the bridge: load env, wire config + stores + the Slack app, then run
  * until a termination signal. Shared by the `slack-claude run` CLI command and
  * the `node dist/index.js` entrypoint used in development.
  */
-export async function runBridge(): Promise<void> {
+export async function runBridge(opts: RunBridgeOptions = {}): Promise<void> {
   loadEnv();
 
   // Default the log file to the per-user log dir when the operator hasn't
@@ -35,6 +43,7 @@ export async function runBridge(): Promise<void> {
   } catch (err) {
     if (err instanceof MissingCredentialsError) {
       logger.error(err.message);
+      opts.onFatal?.(err.message);
       process.exitCode = 1;
       return;
     }
@@ -61,6 +70,7 @@ export async function runBridge(): Promise<void> {
     try {
       await app.stop();
     } finally {
+      removePidFile(home);
       process.exit(0);
     }
   };
@@ -68,4 +78,6 @@ export async function runBridge(): Promise<void> {
   process.on("SIGTERM", () => void shutdown("SIGTERM"));
 
   await app.start();
+  writePidFile(home, process.pid);
+  opts.onReady?.(process.pid);
 }

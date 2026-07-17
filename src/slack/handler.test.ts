@@ -50,6 +50,15 @@ function setup(over: Partial<{ scope: "channel" | "thread"; trigger: "mention" |
     downloads.push(f.id);
     return Buffer.from(`bytes-of-${f.name}`);
   };
+  const reactions: { action: "add" | "remove"; channel: string; ts: string; emoji: string }[] = [];
+  const react = {
+    add: async (channel: string, ts: string, emoji: string) => {
+      reactions.push({ action: "add", channel, ts, emoji });
+    },
+    remove: async (channel: string, ts: string, emoji: string) => {
+      reactions.push({ action: "remove", channel, ts, emoji });
+    },
+  };
   const deps: HandlerDeps = {
     mappings,
     sessions,
@@ -61,8 +70,9 @@ function setup(over: Partial<{ scope: "channel" | "thread"; trigger: "mention" |
     invoke,
     download,
     media: new MediaStore(home),
+    react,
   };
-  return { deps, sessions, posts, invokes, downloads, home };
+  return { deps, sessions, posts, invokes, downloads, reactions, home };
 }
 
 const image = (over: Partial<SlackFile> = {}): SlackFile => ({
@@ -236,6 +246,50 @@ describe("handleInbound", () => {
     expect(posts[0]!.text).toContain("ENOENT");
     // A failed invocation must not count toward messages processed.
     expect(sessions.get("C1")?.messagesProcessed).toBe(0);
+  });
+
+  it("reacts :eyes: on acceptance, then swaps to :white_check_mark: on success", async () => {
+    const { deps, reactions } = setup({ trigger: "auto" });
+    await handleInbound(deps, msg({ ts: "100.5", text: "do it" }));
+    expect(reactions).toEqual([
+      { action: "add", channel: "C1", ts: "100.5", emoji: "eyes" },
+      { action: "remove", channel: "C1", ts: "100.5", emoji: "eyes" },
+      { action: "add", channel: "C1", ts: "100.5", emoji: "white_check_mark" },
+    ]);
+  });
+
+  it("removes the :eyes: reaction without a completion mark when the invocation fails", async () => {
+    const { deps, reactions } = setup({ trigger: "auto" });
+    deps.invoke = async () => {
+      throw new Error("spawn claude ENOENT");
+    };
+    await handleInbound(deps, msg({ ts: "100.6", text: "do it" }));
+    expect(reactions).toEqual([
+      { action: "add", channel: "C1", ts: "100.6", emoji: "eyes" },
+      { action: "remove", channel: "C1", ts: "100.6", emoji: "eyes" },
+    ]);
+  });
+
+  it("does not fail the reply when reacting itself errors", async () => {
+    const { deps, posts } = setup({ trigger: "auto" });
+    deps.react = {
+      add: async () => {
+        throw new Error("missing_scope");
+      },
+      remove: async () => {
+        throw new Error("missing_scope");
+      },
+    };
+    await handleInbound(deps, msg({ text: "do it" }));
+    expect(posts).toHaveLength(1);
+    expect(posts[0]!.text).toContain("claude reply");
+  });
+
+  it("skips reactions entirely when no react dep is provided", async () => {
+    const { deps, posts } = setup({ trigger: "auto" });
+    delete deps.react;
+    await expect(handleInbound(deps, msg({ text: "do it" }))).resolves.not.toThrow();
+    expect(posts).toHaveLength(1);
   });
 
   it("end-to-end with NO fakes: real claude invocation + session persistence", async () => {
