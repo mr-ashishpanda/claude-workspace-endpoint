@@ -2,13 +2,20 @@ name: CI
 
 # Runs on every PR and on merge to master (a merge is a push to master), plus
 # on version tags. Builds, verifies, packs the npm tarball, and uploads it as a
-# downloadable GitHub artifact. Users install the built package with:
-#   npm install github:mr-ashishpanda/claude-workspace-endpoint
+# downloadable GitHub Actions artifact on every run. On a `v*` tag push it also
+# publishes a GitHub Release with the tarball attached, so users can fetch a
+# stable, permanent "latest" build with:
+#   gh release download --repo mr-ashishpanda/claude-workspace-endpoint \
+#     --pattern '*.tgz' -D /tmp/slack-claude-pkg --clobber
+#   npm install -g /tmp/slack-claude-pkg/*.tgz
 on:
   push:
     branches: [master]
     tags: ["v*"]
   pull_request:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -36,3 +43,9 @@ jobs:
           name: slack-claude-bridge-npm-package
           path: "*.tgz"
           if-no-files-found: error
+
+      - name: Publish GitHub release with npm tarball
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create "${{ github.ref_name }}" *.tgz --title "${{ github.ref_name }}" --generate-notes
