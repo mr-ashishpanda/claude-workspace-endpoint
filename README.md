@@ -38,9 +38,14 @@ restarts.
 - A Slack app with Socket Mode enabled. Create it from the ready-to-paste manifest at
   [docs/slack-app-manifest.yml](docs/slack-app-manifest.yml) — it sets exactly the scopes and event
   subscriptions the PRD requires (`channels:history`/`groups:history`, `channels:read`/`groups:read`,
-  `chat:write`, `app_mentions:read`, `files:read`; events `message.channels`, `message.groups`,
-  `app_mention`). The manifest's header lists the steps to obtain the bot token, app-level token, and
-  signing secret.
+  `chat:write`, `app_mentions:read`, `files:read`, `reactions:write`; events `message.channels`,
+  `message.groups`, `app_mention`). The manifest's header lists the steps to obtain the bot token,
+  app-level token, and signing secret.
+  - **Upgrading an existing app** (created before `reactions:write` existed here): paste the updated
+    manifest into your app's **App Manifest** settings page (or add `reactions:write` under **OAuth
+    & Permissions → Scopes → Bot Token Scopes** by hand), then **reinstall the app to the
+    workspace** — Slack only grants newly-added scopes after a reinstall, and until then the bridge
+    logs `missing_scope` warnings when it tries to react and simply skips the reaction.
 
 ## Install
 
@@ -88,6 +93,15 @@ slack-claude map add
 slack-claude map list
 slack-claude map edit <identity>
 slack-claude map remove <identity>
+```
+
+`map add`/`map edit`/`map remove` only write to `mappings.json` — a running bridge loads mappings
+once at startup and keeps them in memory, so it never sees the change. **Restart after any `map`
+command** for it to take effect:
+
+```bash
+slack-claude stop
+slack-claude run
 ```
 
 When credentials are configured, `map add`/`map edit` verify the channel id live against Slack

@@ -33,6 +33,7 @@ oauth_config:
       - groups:read # read private channel metadata
       - chat:write # post messages
       - files:read # download image attachments users upload
+      - reactions:write # add/remove progress reactions (:eyes: / :white_check_mark:) on triggering messages
 
 settings:
   # Socket Mode — no public inbound endpoint (local-first).
