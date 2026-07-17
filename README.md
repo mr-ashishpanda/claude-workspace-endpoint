@@ -44,13 +44,28 @@ restarts.
 
 ## Install
 
-Install the published package straight from GitHub (it builds itself on install), which puts the
-`slack-claude` CLI on your `PATH`:
+If the repo is public and your `PATH` already has git access to GitHub, install straight from the
+source (it builds itself on install), which puts the `slack-claude` CLI on your `PATH`:
 
 ```bash
 npm install -g github:mr-ashishpanda/claude-workspace-endpoint
 slack-claude init
 ```
+
+**Private repo / no git access on the target machine** — every push to `master` or `v*` tag runs
+CI, which builds, verifies, and packs the npm tarball. On a `v*` tag it also attaches that tarball
+to a GitHub Release, so you can fetch the latest published build with the [GitHub CLI](https://cli.github.com/)
+(`gh auth login` once) and a fixed command — no repo clone or SSH key needed on the target machine:
+
+```bash
+gh release download --repo mr-ashishpanda/claude-workspace-endpoint \
+  --pattern '*.tgz' -D /tmp/slack-claude-pkg
+npm install -g /tmp/slack-claude-pkg/*.tgz
+slack-claude init
+```
+
+`gh release download` with no tag argument always grabs the **latest** release, so this command
+stays the same across versions.
 
 Or work from a clone:
 
