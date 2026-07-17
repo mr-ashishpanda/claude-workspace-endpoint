@@ -90,6 +90,11 @@ slack-claude map edit <identity>
 slack-claude map remove <identity>
 ```
 
+When credentials are configured, `map add`/`map edit` verify the channel id live against Slack
+(the bot can see it and is a member) before saving — a typo'd, wrong, or un-invited channel is
+caught immediately, with a chance to fix it and retry, instead of silently dropping every future
+Slack event for that mapping.
+
 `map add`/`map edit` also prompt for two per-mapping options:
 
 - **Model family** — `default` (the CLI auto-picks the latest model), or `sonnet`/`opus`/`haiku`
@@ -136,10 +141,17 @@ Credentials are only ever read from the environment and never logged or written 
 Installed as a CLI:
 
 ```bash
-slack-claude run      # start the bridge (alias: slack-claude start)
+slack-claude run      # start the bridge in the background (alias: slack-claude start)
+slack-claude stop     # stop the background bridge
 slack-claude logs     # print the recent bridge log
 slack-claude logs -f  # follow the log (cross-platform; no `tail` needed)
 ```
+
+`slack-claude run` starts the bridge detached from the current shell: it waits until the bridge
+has connected to Slack (or reports why it couldn't), prints the result, and exits — the bridge
+keeps running under its own pid, independent of the terminal, until `slack-claude stop` or the
+machine restarts. A pidfile at `SLACK_CLAUDE_HOME/bridge.pid` tracks it; running `slack-claude run`
+again while one is already active just reports its pid instead of starting a second instance.
 
 From a clone (development):
 

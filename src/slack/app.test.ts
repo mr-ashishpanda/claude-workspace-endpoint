@@ -7,12 +7,14 @@ import {
   makeMessageHandler,
   mentionsUser,
   extractText,
+  notifyStartup,
   SlackPostClient,
 } from "./app.js";
 import { MappingStore } from "../config/mappings.js";
 import { SessionStore } from "../session/store.js";
 import { Logger } from "../logger.js";
 import { HandlerDeps } from "./handler.js";
+import { Mapping } from "../config/types.js";
 
 const BOT = "UBOT";
 
@@ -277,5 +279,102 @@ describe("makeMessageHandler (Bolt glue → chat.postMessage)", () => {
     await handler({ channel: "C1", ts: "100.1", thread_ts: "99.0", text: "look here" }, client);
     expect(calls[0]!.thread_ts).toBe("99.0");
     rmSync(home, { recursive: true, force: true });
+  });
+
+  it("wires reactions.add/remove through to the handler when the client provides them", async () => {
+    const home = mkdtempSync(join(tmpdir(), "scb-app-react-"));
+    const mappings = MappingStore.load(home);
+    mappings.add({
+      identity: "auth-investigator",
+      channel: "C1",
+      workspace: "/repos/auth",
+      scope: "channel",
+      trigger: "auto",
+    });
+    const sessions = SessionStore.load(home);
+    const reactionCalls: { action: string; channel: string; timestamp: string; name: string }[] =
+      [];
+    const client: SlackPostClient = {
+      chat: { postMessage: async () => ({}) },
+      reactions: {
+        add: async (args) => {
+          reactionCalls.push({ action: "add", ...args });
+          return {};
+        },
+        remove: async (args) => {
+          reactionCalls.push({ action: "remove", ...args });
+          return {};
+        },
+      },
+    };
+    const deps: Omit<HandlerDeps, "post" | "react"> = {
+      mappings,
+      sessions,
+      logger: new Logger("test", {}),
+      claudeBin: "claude",
+      invoke: async () => ({ text: "reply", sessionId: "s1" }),
+    };
+    const handler = makeMessageHandler(deps, () => BOT);
+    await handler({ channel: "C1", ts: "100.1", text: "deploy failed" }, client);
+    expect(reactionCalls).toEqual([
+      { action: "add", channel: "C1", timestamp: "100.1", name: "eyes" },
+      { action: "remove", channel: "C1", timestamp: "100.1", name: "eyes" },
+      { action: "add", channel: "C1", timestamp: "100.1", name: "white_check_mark" },
+    ]);
+    rmSync(home, { recursive: true, force: true });
+  });
+});
+
+describe("notifyStartup", () => {
+  function fakeLogger() {
+    return new Logger("bridge", {});
+  }
+
+  const mapping = (over: Partial<Mapping> = {}): Mapping => ({
+    identity: "auth-investigator",
+    channel: "C1",
+    workspace: "/repos/auth",
+    scope: "channel",
+    trigger: "auto",
+    model: "default",
+    skipPermissions: false,
+    ...over,
+  });
+
+  it("posts an identity-prefixed ready notice naming the host to every mapping's channel", async () => {
+    const calls: { channel: string; text: string }[] = [];
+    const client: SlackPostClient = {
+      chat: {
+        postMessage: async (args) => {
+          calls.push({ channel: args.channel, text: args.text });
+          return {};
+        },
+      },
+    };
+    await notifyStartup(
+      client,
+      [mapping({ identity: "a", channel: "C1" }), mapping({ identity: "b", channel: "C2" })],
+      fakeLogger(),
+      "ip-10-0-0-222",
+    );
+    expect(calls).toHaveLength(2);
+    expect(calls[0]!.channel).toBe("C1");
+    expect(calls[0]!.text).toContain("[a]");
+    expect(calls[0]!.text).toContain("ready to receive messages from `ip-10-0-0-222`");
+    expect(calls[1]!.channel).toBe("C2");
+    expect(calls[1]!.text).toContain("[b]");
+  });
+
+  it("does not throw when a mapping's channel post fails (e.g. bad/un-invited channel)", async () => {
+    const client: SlackPostClient = {
+      chat: {
+        postMessage: async () => {
+          throw Object.assign(new Error("channel_not_found"), {
+            data: { error: "channel_not_found" },
+          });
+        },
+      },
+    };
+    await expect(notifyStartup(client, [mapping()], fakeLogger(), "host")).resolves.toBeUndefined();
   });
 });
