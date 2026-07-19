@@ -4,7 +4,7 @@ import { configEnvPath } from "./env.js";
 
 describe("configEnvPath", () => {
   it("points at .env inside the per-user config dir (linux)", () => {
-    const path = configEnvPath({ XDG_CONFIG_HOME: "/cfg" });
+    const path = configEnvPath({ XDG_CONFIG_HOME: "/cfg" }, "linux");
     expect(path).toBe(join("/cfg", "slack-claude", ".env"));
   });
 

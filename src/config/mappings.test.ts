@@ -69,8 +69,8 @@ describe("validateMapping", () => {
   });
 
   it("expands a leading ~ in claudeConfigDir to the home directory", () => {
-    const m = validateMapping({ ...base, claudeConfigDir: "~/.claude-ashish" });
-    expect(m.claudeConfigDir).toBe(join(homedir(), ".claude-ashish"));
+    const m = validateMapping({ ...base, claudeConfigDir: "~/.claude-work" });
+    expect(m.claudeConfigDir).toBe(join(homedir(), ".claude-work"));
   });
 });
 

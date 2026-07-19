@@ -6,7 +6,7 @@ Slack-Claude Bridge
 
 ## Objective
 
-Build a local agent that integrates Slack with Claude Code, allowing Claude Code to participate in Slack conversations while operating within configured local workspaces.
+Build the bridge — a local process that integrates Slack with Claude Code, allowing Claude Code to participate in Slack conversations while operating within configured local workspaces.
 
 The product must allow Slack channels to be mapped to local working directories containing source code, documentation, scripts, and a `CLAUDE.md` file. Claude Code will be invoked within the mapped workspace and respond back to Slack according to the configured behavior.
 
@@ -19,7 +19,7 @@ This is a local-first product. No server-side components, coordinators, relays, 
 ## In Scope
 
 - Single Slack App
-- Single local agent process
+- Single local bridge process
 - Multiple channel mappings
 - Multiple workspace mappings
 - Public Slack channels
@@ -36,7 +36,7 @@ This is a local-first product. No server-side components, coordinators, relays, 
 
 ## Out of Scope
 
-- Multiple agent coordination
+- Multiple bridge coordination
 - Multi-machine deployments
 - Event relays
 - Hosted services
@@ -47,7 +47,7 @@ This is a local-first product. No server-side components, coordinators, relays, 
 - Multiple Claude personas
 - Human approval workflows
 - Load balancing
-- Agent orchestration
+- Bridge orchestration
 - Session summarization
 - Session reset commands
 - Session termination commands
@@ -64,7 +64,7 @@ Slack Workspace
 Single Slack App
        │
        ▼
-Single Local Agent
+The Bridge
        │
        ├── Mapping A
        ├── Mapping B
@@ -72,7 +72,7 @@ Single Local Agent
        └── Claude Code
 ```
 
-The local agent owns:
+The bridge owns:
 
 - Slack event processing
 - Session management
@@ -102,7 +102,7 @@ scripts/
 source code
 ```
 
-The agent must invoke Claude Code from within the mapped workspace.
+The bridge must invoke Claude Code from within the mapped workspace.
 
 Example:
 
@@ -267,7 +267,7 @@ Sessions must persist across messages.
 
 The implementation must maintain session state and reuse existing Claude sessions according to the configured scope.
 
-Session data should survive agent restarts where technically feasible.
+Session data should survive bridge restarts where technically feasible.
 
 Local persistence is acceptable.
 
@@ -319,7 +319,7 @@ No other Slack commands are required in V1.
 
 # CLI Requirements
 
-## Initialize Agent
+## Initialize the Bridge
 
 ```bash
 slack-claude init
@@ -397,11 +397,11 @@ Required capabilities include:
 # Expected User Workflow
 
 1. Install Slack App into workspace.
-2. Install local Slack-Claude agent.
+2. Install the bridge (local Slack-Claude process).
 3. Run `slack-claude init`.
 4. Create one or more mappings.
-5. Start agent.
-6. Agent listens for Slack events.
+5. Start the bridge.
+6. The bridge listens for Slack events.
 7. Matching events are routed to the configured workspace.
 8. Claude Code executes within that workspace.
 9. Claude response is published back to Slack according to configured session scope.
@@ -413,7 +413,7 @@ Required capabilities include:
 The product is considered complete when:
 
 1. A user can install the Slack App.
-2. A user can install the local agent.
+2. A user can install the bridge.
 3. A user can create multiple channel-to-workspace mappings.
 4. Claude Code is invoked within the mapped workspace.
 5. Public and private Slack channels are supported.
@@ -423,4 +423,4 @@ The product is considered complete when:
 9. Session state is maintained and reused.
 10. `@claude status` returns accurate runtime information.
 11. No server-side components are required.
-12. The system operates entirely through a single local agent process.
+12. The system operates entirely through a single local bridge process.

@@ -9,7 +9,10 @@ logs/
 !.env.example
 .DS_Store
 
-# Local agent runtime state (sessions, mappings) — local-first, never commit
+# Local bridge runtime state (sessions, mappings) — local-first, never commit
 .slack-claude/
 *.sqlite
 *.sqlite-journal
+
+# Local scratch notes — never meant to be committed
+*.local.md

@@ -21,10 +21,13 @@ export function tailLines(content: string, n: number): string {
 }
 
 /** Resolve the active log file path (LOG_FILE, else the per-user log dir). */
-export function resolveLogFile(env: NodeJS.ProcessEnv = process.env): string {
+export function resolveLogFile(
+  env: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
+): string {
   const configured = env.LOG_FILE?.trim();
   if (configured) return configured;
-  return join(platformDirs(env).log, "bridge.log");
+  return join(platformDirs(env, platform).log, "bridge.log");
 }
 
 /** Read bytes [from, size) of a file as UTF-8 text. */
