@@ -27,7 +27,7 @@ describe("resolveLogFile", () => {
   });
 
   it("falls back to the per-user log dir", () => {
-    const path = resolveLogFile({ XDG_STATE_HOME: "/state" });
+    const path = resolveLogFile({ XDG_STATE_HOME: "/state" }, "linux");
     expect(path).toBe(join("/state", "slack-claude", "logs", "bridge.log"));
   });
 });

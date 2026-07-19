@@ -1,5 +1,8 @@
 # Slack-Claude Bridge
 
+[![CI](https://github.com/mr-ashishpanda/claude-workspace-endpoint/actions/workflows/ci.yml/badge.svg)](https://github.com/mr-ashishpanda/claude-workspace-endpoint/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 A **local-first** service that bridges Slack with [Claude Code](https://claude.com/claude-code). It
 maps Slack channels (and threads) to local workspace directories, invokes `claude` inside the mapped
 workspace when triggered, and posts the reply back to the right Slack location.
@@ -49,18 +52,18 @@ restarts.
 
 ## Install
 
-If the repo is public and your `PATH` already has git access to GitHub, install straight from the
-source (it builds itself on install), which puts the `slack-claude` CLI on your `PATH`:
+Install directly from GitHub — it builds itself on install and puts the `slack-claude` CLI on your
+`PATH`:
 
 ```bash
 npm install -g github:mr-ashishpanda/claude-workspace-endpoint
 slack-claude init
 ```
 
-**Private repo / no git access on the target machine** — every push to `master` or `v*` tag runs
-CI, which builds, verifies, and packs the npm tarball. On a `v*` tag it also attaches that tarball
-to a GitHub Release, so you can fetch the latest published build with the [GitHub CLI](https://cli.github.com/)
-(`gh auth login` once) and a fixed command — no repo clone or SSH key needed on the target machine:
+**Alternative — a pinned release build.** Every push to `master` and every `v*` tag runs CI, which
+builds, verifies, and packs the npm tarball; a `v*` tag also attaches that tarball to a GitHub
+Release. Fetch the latest published build with the [GitHub CLI](https://cli.github.com/)
+(`gh auth login` once) instead of installing from source:
 
 ```bash
 gh release download --repo mr-ashishpanda/claude-workspace-endpoint \
@@ -189,3 +192,13 @@ npm run format   # prettier
 
 See [CLAUDE.md](CLAUDE.md) for the operating rules and review checklist, and `docs/prd.md` for the
 authoritative spec.
+
+## Contributing
+
+Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for the workflow and
+[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) for community expectations. Found a security issue? See
+[SECURITY.md](SECURITY.md) instead of filing a public issue.
+
+## License
+
+[MIT](LICENSE)

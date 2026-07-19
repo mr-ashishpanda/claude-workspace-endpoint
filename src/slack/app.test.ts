@@ -92,10 +92,10 @@ describe("extractText", () => {
   });
 
   it("reconstructs authored text from rich_text and ignores a context footer", () => {
-    // The exact shape captured from live Slack: a "Sent using Claude" footer
-    // context block flattened into `text` must NOT pollute the command.
+    // Shape mirrors what Slack sends: a "Sent using Claude" footer context
+    // block flattened into `text` must NOT pollute the command.
     const raw = {
-      text: "<@U0BE2EASS3X> status *Sent using* Claude",
+      text: "<@U1TESTUSER> status *Sent using* Claude",
       blocks: [
         {
           type: "rich_text",
@@ -103,7 +103,7 @@ describe("extractText", () => {
             {
               type: "rich_text_section",
               elements: [
-                { type: "user", user_id: "U0BE2EASS3X" },
+                { type: "user", user_id: "U1TESTUSER" },
                 { type: "text", text: " status" },
               ],
             },
@@ -115,7 +115,7 @@ describe("extractText", () => {
         },
       ],
     };
-    expect(extractText(raw)).toBe("<@U0BE2EASS3X> status");
+    expect(extractText(raw)).toBe("<@U1TESTUSER> status");
   });
 
   it("renders channels, emoji, and links inside rich_text", () => {

@@ -27,13 +27,18 @@ Reserve "agent"/"subagent" for AI agents. Use "the bridge" in code, logs, docs, 
 ## Repository layout
 
 ```
-src/            application code (create as you implement; not scaffolded yet)
-  cli/          slack-claude CLI commands
-  slack/        Bolt app, event routing
+src/
+  bridge.ts     wiring: Slack app + session store + Claude invocation
+  index.ts      process entrypoint
+  logger.ts, log-sink.ts   structured logging + log-file rotation
+  cli/          slack-claude CLI commands (init, map add|list|edit|remove, run/stop/logs)
+  slack/        Bolt app, event routing, channel validation, file download
   session/      session store + scope keys (channel_id, channel_id+thread_ts)
   claude/       Claude Code invocation per workspace
-  config/       mappings + credentials
-docs/           prd.md (spec), workspace-setup.md (setup intent)
+  config/       mappings + credentials + cross-platform paths
+  daemon/       background run (pidfile, readiness wait)
+docs/           prd.md (spec), AGENT-SETUP.md (agent/tool setup), slack-app-manifest.yml,
+                dev/specs/ (internal design specs — not user-facing docs)
 logs/           runtime logs (bridge.log) — gitignored
 .claude/        Claude Code config: settings, hooks, skills
 ```

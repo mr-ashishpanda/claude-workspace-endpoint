@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { mkdtempSync, rmSync, writeFileSync, chmodSync, mkdirSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync, chmodSync, mkdirSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { invokeClaude, ClaudeInvocationError } from "./invoke.js";
@@ -70,7 +70,9 @@ describe("invokeClaude with the real process runner", () => {
       resumeSessionId: null,
     });
     expect(res.sessionId).toBe("stub-session");
-    expect(res.text).toContain(`cwd=${workspace}`);
+    // Compare via realpath: on macOS the spawned child reports its cwd already
+    // resolved through the /var -> /private/var symlink, while `workspace` is not.
+    expect(res.text).toContain(`cwd=${realpathSync(workspace)}`);
     expect(res.text).toContain("resume=false");
     expect(res.text).toContain("prompt=investigate the outage");
   });

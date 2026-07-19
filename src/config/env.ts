@@ -8,8 +8,11 @@ import { platformDirs } from "./platform.js";
  * is where `slack-claude init` writes credentials so they load no matter which
  * directory the bridge is launched from.
  */
-export function configEnvPath(env: NodeJS.ProcessEnv = process.env): string {
-  return join(platformDirs(env).config, ".env");
+export function configEnvPath(
+  env: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
+): string {
+  return join(platformDirs(env, platform).config, ".env");
 }
 
 /**
