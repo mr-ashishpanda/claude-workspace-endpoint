@@ -84,6 +84,16 @@ describe("normalizeMessage", () => {
     const m = normalizeMessage({ channel: "C1", ts: "1", text: "hi" }, BOT);
     expect(m).not.toHaveProperty("files");
   });
+
+  it("carries the sender's Slack user id", () => {
+    const m = normalizeMessage({ channel: "C1", ts: "1", text: "hi", user: "U555" }, BOT);
+    expect(m?.user).toBe("U555");
+  });
+
+  it("omits user when the raw event has none", () => {
+    const m = normalizeMessage({ channel: "C1", ts: "1", text: "hi" }, BOT);
+    expect(m?.user).toBeUndefined();
+  });
 });
 
 describe("extractText", () => {

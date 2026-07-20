@@ -138,6 +138,7 @@ export function normalizeMessage(raw: RawMessage, botUserId: string): InboundMes
     fromBot: Boolean(raw.bot_id),
     // Omit the key entirely when there are no attachments (keeps plain messages clean).
     ...(files.length > 0 ? { files } : {}),
+    ...(raw.user ? { user: raw.user } : {}),
   };
 }
 
