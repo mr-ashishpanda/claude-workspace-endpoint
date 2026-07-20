@@ -34,6 +34,7 @@ oauth_config:
       - chat:write # post messages
       - files:read # download image attachments users upload
       - reactions:write # add/remove progress reactions (:eyes: / :white_check_mark:) on triggering messages
+      - users:read # resolve the sender's display name for the optional Slack-prefix tag
 
 settings:
   # Socket Mode — no public inbound endpoint (local-first).
