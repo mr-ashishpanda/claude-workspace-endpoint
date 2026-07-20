@@ -10,6 +10,7 @@ import { KeyedSerializer } from "./session/serializer.js";
 import { MediaStore } from "./session/media.js";
 import { createSlackApp } from "./slack/app.js";
 import { createFileDownloader } from "./slack/download.js";
+import { createUserResolver } from "./slack/user-lookup.js";
 import { removePidFile, writePidFile } from "./daemon/pidfile.js";
 
 export interface RunBridgeOptions {
@@ -58,10 +59,20 @@ export async function runBridge(opts: RunBridgeOptions = {}): Promise<void> {
   const serializer = new KeyedSerializer();
   const media = new MediaStore(home);
   const download = createFileDownloader(creds.botToken);
+  const userResolver = createUserResolver(creds.botToken);
 
   const app = createSlackApp(
     creds,
-    { mappings, sessions, logger, claudeBin: claudeBin(), serializer, media, download },
+    {
+      mappings,
+      sessions,
+      logger,
+      claudeBin: claudeBin(),
+      serializer,
+      media,
+      download,
+      resolveUser: (id) => userResolver.resolve(id),
+    },
     logger,
   );
 
