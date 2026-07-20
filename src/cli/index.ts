@@ -132,6 +132,9 @@ async function cmdMapAdd(): Promise<void> {
     const model = await p.choose("Model family (default = latest, auto)", CLAUDE_MODELS, "default");
     const skipPermissions = await p.confirm(SKIP_PERMISSIONS_WARNING);
     const claudeConfigDir = await p.ask("Custom CLAUDE_CONFIG_DIR (blank = bridge default)");
+    const slackPrefix = await p.confirm(
+      'Tag messages to Claude with the Slack sender, e.g. "[Slack: jane.doe] ..."?',
+    );
     const mapping = store.add({
       identity,
       channel,
@@ -141,11 +144,13 @@ async function cmdMapAdd(): Promise<void> {
       model,
       skipPermissions,
       claudeConfigDir,
+      slackPrefix,
     });
     process.stdout.write(
       `Added mapping [${mapping.identity}] → ${mapping.workspace} ` +
         `(${mapping.scope}/${mapping.trigger}, model=${mapping.model}` +
-        `${mapping.skipPermissions ? ", skip-permissions" : ""}).\n`,
+        `${mapping.skipPermissions ? ", skip-permissions" : ""}` +
+        `${mapping.slackPrefix ? ", slack-prefix" : ""}).\n`,
     );
   } finally {
     p.close();
@@ -168,6 +173,7 @@ function cmdMapList(): void {
         `  trigger:     ${m.trigger}\n` +
         `  model:       ${m.model}\n` +
         `  permissions: ${m.skipPermissions ? "skipped (dangerous)" : "enforced"}\n` +
+        `  slack tag:   ${m.slackPrefix ? "enabled" : "disabled"}\n` +
         `  config dir:  ${m.claudeConfigDir ?? "(bridge default)"}\n`,
     );
   }
@@ -203,6 +209,10 @@ async function cmdMapEdit(identity: string): Promise<void> {
       "Custom CLAUDE_CONFIG_DIR (blank = bridge default)",
       current.claudeConfigDir,
     );
+    const slackPrefix = await p.confirm(
+      'Tag messages to Claude with the Slack sender, e.g. "[Slack: jane.doe] ..."?',
+      current.slackPrefix,
+    );
     const updated = store.edit(identity, {
       channel,
       workspace,
@@ -211,6 +221,7 @@ async function cmdMapEdit(identity: string): Promise<void> {
       model,
       skipPermissions,
       claudeConfigDir,
+      slackPrefix,
     });
     process.stdout.write(`Updated mapping [${updated.identity}].\n`);
   } finally {
