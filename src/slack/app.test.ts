@@ -338,6 +338,7 @@ describe("notifyStartup", () => {
     trigger: "auto",
     model: "default",
     skipPermissions: false,
+    slackPrefix: false,
     ...over,
   });
 

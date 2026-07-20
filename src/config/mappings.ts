@@ -65,6 +65,8 @@ export function validateMapping(input: Partial<Mapping>): Mapping {
 
   const skipPermissions = input.skipPermissions ?? false;
 
+  const slackPrefix = input.slackPrefix ?? false;
+
   // Optional per-mapping CLAUDE_CONFIG_DIR; blank ⇒ unset (inherit environment).
   // Expand a leading `~` (shell home shorthand users naturally type) before
   // resolving, since path.resolve treats `~` as a literal directory name.
@@ -83,6 +85,7 @@ export function validateMapping(input: Partial<Mapping>): Mapping {
     trigger,
     model,
     skipPermissions,
+    slackPrefix,
     ...(claudeConfigDir ? { claudeConfigDir } : {}),
   };
 }
