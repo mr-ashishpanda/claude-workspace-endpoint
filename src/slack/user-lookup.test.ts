@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { UserResolver, UserLookupClient } from "./user-lookup.js";
+import { Logger } from "../logger.js";
 
 function fakeClient(impl: UserLookupClient["users"]["info"]): UserLookupClient {
   return { users: { info: impl } };
@@ -48,5 +49,18 @@ describe("UserResolver", () => {
     expect(await resolver.resolve("U1")).toBe("U1");
     expect(await resolver.resolve("U1")).toBe("U1");
     expect(calls).toBe(2); // not cached — retried on the second call
+  });
+
+  it("logs a warning with the user id and underlying error on a lookup failure", async () => {
+    const info = async () => {
+      throw new Error("missing_scope");
+    };
+    const warn = vi.fn();
+    const resolver = new UserResolver({ users: { info } }, { warn } as unknown as Logger);
+    await resolver.resolve("U1");
+    expect(warn).toHaveBeenCalledTimes(1);
+    const [message] = warn.mock.calls[0] as [string];
+    expect(message).toContain("U1");
+    expect(message).toContain("missing_scope");
   });
 });

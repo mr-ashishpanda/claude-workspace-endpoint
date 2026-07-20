@@ -20,6 +20,9 @@ const SKIP_PERMISSIONS_WARNING =
   "Skip permission prompts (--dangerously-skip-permissions)?\n" +
   "  WARNING: Claude will act without asking. Only for trusted workspaces.";
 
+const SLACK_PREFIX_PROMPT =
+  'Tag messages to Claude with the Slack sender, e.g. "[Slack: jane.doe] ..."?';
+
 function usage(): void {
   process.stdout.write(
     [
@@ -132,9 +135,7 @@ async function cmdMapAdd(): Promise<void> {
     const model = await p.choose("Model family (default = latest, auto)", CLAUDE_MODELS, "default");
     const skipPermissions = await p.confirm(SKIP_PERMISSIONS_WARNING);
     const claudeConfigDir = await p.ask("Custom CLAUDE_CONFIG_DIR (blank = bridge default)");
-    const slackPrefix = await p.confirm(
-      'Tag messages to Claude with the Slack sender, e.g. "[Slack: jane.doe] ..."?',
-    );
+    const slackPrefix = await p.confirm(SLACK_PREFIX_PROMPT);
     const mapping = store.add({
       identity,
       channel,
@@ -209,10 +210,7 @@ async function cmdMapEdit(identity: string): Promise<void> {
       "Custom CLAUDE_CONFIG_DIR (blank = bridge default)",
       current.claudeConfigDir,
     );
-    const slackPrefix = await p.confirm(
-      'Tag messages to Claude with the Slack sender, e.g. "[Slack: jane.doe] ..."?',
-      current.slackPrefix,
-    );
+    const slackPrefix = await p.confirm(SLACK_PREFIX_PROMPT, current.slackPrefix);
     const updated = store.edit(identity, {
       channel,
       workspace,

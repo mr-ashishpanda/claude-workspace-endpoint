@@ -112,7 +112,7 @@ When credentials are configured, `map add`/`map edit` verify the channel id live
 caught immediately, with a chance to fix it and retry, instead of silently dropping every future
 Slack event for that mapping.
 
-`map add`/`map edit` also prompt for two per-mapping options:
+`map add`/`map edit` also prompt for several per-mapping options:
 
 - **Model family** — `default` (the CLI auto-picks the latest model), or `sonnet`/`opus`/`haiku`
   (latest of that family). Passed to `claude` as `--model`.
@@ -121,6 +121,12 @@ Slack event for that mapping.
 - **Custom `CLAUDE_CONFIG_DIR`** — optionally point this mapping's `claude -p` runs at a separate
   Claude config directory (its own settings, MCP servers, and auth). Blank inherits the bridge
   process's environment; `~` is expanded.
+- **Slack-sender prefix** — opt in to tag each prompt with `[Slack: <sender>]`, where `<sender>` is
+  the message author's Slack display name resolved via `users.info`. The bridge only prepends the
+  tag; it doesn't write into the mapped workspace. To have Claude actually act on the tag (reply in
+  Slack style, strip it from the visible request, etc.), copy `docs/templates/slack.md` and
+  `docs/templates/claude-md-slack-snippet.md` into the mapped workspace repo by hand — see those
+  files for what to copy where.
 
 ### Where things live
 

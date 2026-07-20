@@ -1,4 +1,5 @@
 import { WebClient } from "@slack/web-api";
+import { Logger } from "../logger.js";
 
 /** The slice of the Slack Web client user-lookup needs. */
 export interface UserLookupClient {
@@ -21,7 +22,10 @@ export interface UserLookupClient {
 export class UserResolver {
   private readonly cache = new Map<string, string>();
 
-  constructor(private readonly client: UserLookupClient) {}
+  constructor(
+    private readonly client: UserLookupClient,
+    private readonly logger?: Logger,
+  ) {}
 
   async resolve(userId: string): Promise<string> {
     const cached = this.cache.get(userId);
@@ -35,7 +39,13 @@ export class UserResolver {
         userId;
       this.cache.set(userId, name);
       return name;
-    } catch {
+    } catch (err) {
+      const slackError =
+        typeof err === "object" && err !== null && "data" in err
+          ? (err as { data?: { error?: string } }).data?.error
+          : undefined;
+      const reason = slackError ?? (err instanceof Error ? err.message : String(err));
+      this.logger?.warn(`failed to resolve display name for Slack user ${userId}: ${reason}`);
       return userId;
     }
   }
@@ -44,7 +54,8 @@ export class UserResolver {
 /** Real-world factory: a `UserResolver` backed by the Slack Web API. */
 export function createUserResolver(
   botToken: string,
+  logger?: Logger,
   client: UserLookupClient = new WebClient(botToken),
 ): UserResolver {
-  return new UserResolver(client);
+  return new UserResolver(client, logger);
 }

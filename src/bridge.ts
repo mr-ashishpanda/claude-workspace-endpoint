@@ -59,7 +59,7 @@ export async function runBridge(opts: RunBridgeOptions = {}): Promise<void> {
   const serializer = new KeyedSerializer();
   const media = new MediaStore(home);
   const download = createFileDownloader(creds.botToken);
-  const userResolver = createUserResolver(creds.botToken);
+  const userResolver = createUserResolver(creds.botToken, logger);
 
   const app = createSlackApp(
     creds,
