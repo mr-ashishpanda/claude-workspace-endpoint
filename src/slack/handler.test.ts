@@ -26,7 +26,13 @@ interface Post {
   threadTs: string | undefined;
 }
 
-function setup(over: Partial<{ scope: "channel" | "thread"; trigger: "mention" | "auto" }> = {}) {
+function setup(
+  over: Partial<{
+    scope: "channel" | "thread";
+    trigger: "mention" | "auto";
+    slackPrefix: boolean;
+  }> = {},
+) {
   const mappings = MappingStore.load(home);
   mappings.add({
     identity: "auth-investigator",
@@ -34,6 +40,7 @@ function setup(over: Partial<{ scope: "channel" | "thread"; trigger: "mention" |
     workspace: "/repos/auth",
     scope: over.scope ?? "channel",
     trigger: over.trigger ?? "auto",
+    slackPrefix: over.slackPrefix ?? false,
   });
   const sessions = SessionStore.load(home);
   const posts: Post[] = [];
@@ -445,5 +452,48 @@ process.stdin.on("end", () => {
 
     expect(invokes).toEqual([null, "sess_new"]); // first new, second resumes
     expect(sessions.get("C1")?.messagesProcessed).toBe(2);
+  });
+});
+
+describe("Slack sender prefix", () => {
+  it("does not prefix the prompt when slackPrefix is disabled", async () => {
+    const { deps, invokes } = setup({ trigger: "auto", slackPrefix: false });
+    await handleInbound(deps, msg({ text: "deploy failed", user: "U1" }));
+    expect(invokes[0]!.prompt).toBe("deploy failed");
+  });
+
+  it("prefixes with the raw Slack id when no resolveUser dep is provided", async () => {
+    const { deps, invokes } = setup({ trigger: "auto", slackPrefix: true });
+    await handleInbound(deps, msg({ text: "deploy failed", user: "U1" }));
+    expect(invokes[0]!.prompt).toBe("[Slack: U1] deploy failed");
+  });
+
+  it("prefixes with the resolved display name when resolveUser is provided", async () => {
+    const { deps, invokes } = setup({ trigger: "auto", slackPrefix: true });
+    deps.resolveUser = async (id) => `name-for-${id}`;
+    await handleInbound(deps, msg({ text: "deploy failed", user: "U1" }));
+    expect(invokes[0]!.prompt).toBe("[Slack: name-for-U1] deploy failed");
+  });
+
+  it("prefixes an image-only message with the bare tag before the image note", async () => {
+    const { deps, invokes } = setup({ trigger: "auto", slackPrefix: true });
+    await handleInbound(deps, msg({ text: "", user: "U1", files: [image()] }));
+    expect(invokes[0]!.prompt.startsWith("[Slack: U1]")).toBe(true);
+    expect(invokes[0]!.prompt).toContain("diagram.png");
+  });
+
+  it("still skips invocation for an unsupported-only upload even with slackPrefix on", async () => {
+    const { deps, invokes, posts } = setup({ trigger: "auto", slackPrefix: true });
+    await handleInbound(
+      deps,
+      msg({
+        text: "",
+        user: "U1",
+        files: [image({ id: "P", name: "report.pdf", mimetype: "application/pdf" })],
+      }),
+    );
+    expect(invokes).toHaveLength(0);
+    expect(posts).toHaveLength(1);
+    expect(posts[0]!.text).toContain("not supported");
   });
 });

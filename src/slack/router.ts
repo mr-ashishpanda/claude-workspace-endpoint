@@ -12,6 +12,8 @@ export interface InboundMessage extends MessageContext {
   fromBot: boolean;
   /** File attachments on the message (empty/omitted when none). */
   files?: SlackFile[];
+  /** Slack user id of the sender (absent for message subtypes without one). */
+  user?: string;
 }
 
 export type RouteAction = "ignore" | "status" | "invoke";

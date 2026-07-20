@@ -8,6 +8,7 @@ import { MediaStore } from "../session/media.js";
 import { InboundMessage, route } from "./router.js";
 import { formatStatus, withIdentity, withSessionHeader } from "./status.js";
 import { SlackFile, partitionFiles, formatUnsupportedNotice, buildImagePrompt } from "./files.js";
+import { withSlackPrefix } from "./slack-prefix.js";
 
 /** Posts a reply to Slack. `threadTs` undefined ⇒ post to the channel root. */
 export type Poster = (channel: string, text: string, threadTs: string | undefined) => Promise<void>;
@@ -58,6 +59,11 @@ export interface HandlerDeps {
   serializer?: KeyedSerializer;
   /** Downloads Slack image attachments. Absent ⇒ attachments are skipped. */
   download?: FileDownloader;
+  /**
+   * Resolves a Slack user id to a display name for the `[Slack: <name>]` tag.
+   * Absent ⇒ the raw Slack user id is used as-is.
+   */
+  resolveUser?: (userId: string) => Promise<string>;
   /** Caches downloaded images so Claude can read them by path. */
   media?: MediaStore;
   /** Optional runner override (tests inject a fake to avoid spawning claude). */
@@ -149,13 +155,20 @@ export async function handleInbound(deps: HandlerDeps, msg: InboundMessage): Pro
           }
         }
 
-        const prompt = buildImagePrompt(decision.prompt ?? "", imagePaths);
+        const rawPrompt = decision.prompt ?? "";
         // Nothing Claude can act on (e.g. only unsupported files): the notice was
-        // already posted, so don't create a session or invoke.
-        if (!prompt.trim() && imagePaths.length === 0) {
+        // already posted, so don't create a session or invoke. Checked on the raw
+        // prompt, before any Slack-prefix tag, so a bare tag never counts as
+        // "actionable" on its own.
+        if (!rawPrompt.trim() && imagePaths.length === 0) {
           log.info(`no actionable content for session ${key}; not invoking`);
           return;
         }
+
+        const taggedPrompt = mapping.slackPrefix
+          ? await withSlackPrefix(rawPrompt, msg.user, deps.resolveUser)
+          : rawPrompt;
+        const prompt = buildImagePrompt(taggedPrompt, imagePaths);
 
         const session = deps.sessions.getOrCreate(key, mapping.identity);
         const effectiveConfigDir = mapping.claudeConfigDir;

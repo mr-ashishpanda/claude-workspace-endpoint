@@ -21,6 +21,7 @@ function mapping(over: Partial<Mapping> = {}): Mapping {
     trigger: "mention",
     model: "default",
     skipPermissions: false,
+    slackPrefix: false,
     ...over,
   };
 }

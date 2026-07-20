@@ -57,6 +57,14 @@ describe("validateMapping", () => {
     expect(validateMapping({ ...base, skipPermissions: true }).skipPermissions).toBe(true);
   });
 
+  it("defaults slackPrefix to false when absent", () => {
+    expect(validateMapping(base).slackPrefix).toBe(false);
+  });
+
+  it("preserves an explicit slackPrefix=true", () => {
+    expect(validateMapping({ ...base, slackPrefix: true }).slackPrefix).toBe(true);
+  });
+
   it("leaves claudeConfigDir undefined when not provided or blank", () => {
     expect(validateMapping(base).claudeConfigDir).toBeUndefined();
     expect(validateMapping({ ...base, claudeConfigDir: "   " }).claudeConfigDir).toBeUndefined();
@@ -119,6 +127,12 @@ describe("MappingStore CRUD + persistence", () => {
     expect(reloaded?.skipPermissions).toBe(true);
   });
 
+  it("round-trips slackPrefix", () => {
+    const store = MappingStore.load(home);
+    store.add({ ...base, slackPrefix: true });
+    expect(MappingStore.load(home).get("auth-investigator")?.slackPrefix).toBe(true);
+  });
+
   it("round-trips claudeConfigDir", () => {
     const store = MappingStore.load(home);
     store.add({ ...base, claudeConfigDir: "/home/me/.claude-custom" });
@@ -145,5 +159,6 @@ describe("MappingStore CRUD + persistence", () => {
     const reloaded = MappingStore.load(home).get("legacy");
     expect(reloaded?.model).toBe("default");
     expect(reloaded?.skipPermissions).toBe(false);
+    expect(reloaded?.slackPrefix).toBe(false);
   });
 });

@@ -35,6 +35,8 @@ export interface Mapping {
   model: ClaudeModel;
   /** Pass `--dangerously-skip-permissions` to Claude Code for this workspace. */
   skipPermissions: boolean;
+  /** Prepend `[Slack: <sender>]` to every prompt sent to Claude for this mapping. */
+  slackPrefix: boolean;
   /**
    * Optional custom `CLAUDE_CONFIG_DIR` for this mapping's `claude -p` runs, for
    * users who keep a separate Claude config (settings, MCP servers, auth).

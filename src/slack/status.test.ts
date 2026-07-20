@@ -10,6 +10,7 @@ const mapping: Mapping = {
   trigger: "auto",
   model: "default",
   skipPermissions: false,
+  slackPrefix: false,
 };
 
 describe("formatUtc", () => {
