@@ -16,3 +16,6 @@ logs/
 
 # Local scratch notes — never meant to be committed
 *.local.md
+
+# Git worktrees for isolated feature work
+.worktrees/
