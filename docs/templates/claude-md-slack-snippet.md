@@ -10,13 +10,13 @@ Add a section like this to your workspace's `CLAUDE.md`:
 
     ## Messages from Slack
 
-    If an inbound user message starts with a `[Slack: <name>]` tag, it arrived
-    through the Slack-Claude bridge, not a local terminal session. Load `slack.md`
-    at the repo root and follow its reply rules for this response — Slack
-    `mrkdwn` formatting, concise replies, no tables/headers.
+    If an inbound user message starts with a `[Slack: <name> (<id>)]` tag, it
+    arrived through the Slack-Claude bridge, not a local terminal session. Load
+    `slack.md` at the repo root and follow its reply rules for this response —
+    Slack `mrkdwn` formatting, concise replies, no tables/headers.
 
-    The `[Slack: <name>]` tag itself is metadata, not part of the user's actual
-    request — don't quote it back or comment on it in your reply.
+    The `[Slack: <name> (<id>)]` tag itself is metadata, not part of the user's
+    actual request — don't quote it back or comment on it in your reply.
 
 The tag only appears when the mapping routing this channel/thread has the
 Slack-sender-prefix option enabled; workspaces mapped without it never see the tag,

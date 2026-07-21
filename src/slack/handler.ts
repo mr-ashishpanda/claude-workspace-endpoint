@@ -60,7 +60,7 @@ export interface HandlerDeps {
   /** Downloads Slack image attachments. Absent ⇒ attachments are skipped. */
   download?: FileDownloader;
   /**
-   * Resolves a Slack user id to a display name for the `[Slack: <name>]` tag.
+   * Resolves a Slack user id to a display name for the `[Slack: <name> (<id>)]` tag.
    * Absent ⇒ the raw Slack user id is used as-is.
    */
   resolveUser?: (userId: string) => Promise<string>;

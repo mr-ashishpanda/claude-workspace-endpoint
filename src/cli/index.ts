@@ -21,7 +21,7 @@ const SKIP_PERMISSIONS_WARNING =
   "  WARNING: Claude will act without asking. Only for trusted workspaces.";
 
 const SLACK_PREFIX_PROMPT =
-  'Tag messages to Claude with the Slack sender, e.g. "[Slack: jane.doe] ..."?';
+  'Tag messages to Claude with the Slack sender, e.g. "[Slack: Jane Doe (U012ABCDEF)] ..."?';
 
 function usage(): void {
   process.stdout.write(
