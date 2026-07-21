@@ -64,3 +64,19 @@ export interface SessionRecord {
   /** ISO timestamp when the session record was first created. */
   createdAt: string;
 }
+
+/** Global audit-trail settings (per-mapping overrides live on `Mapping.audit`). */
+export interface AuditConfig {
+  /** Record audit records at all. */
+  enabled: boolean;
+  /** Generate a Claude summary per record (the only token-costing part). */
+  summary: boolean;
+  /** Retention thresholds used by the `audit` maintenance commands. */
+  retention: { compactAfterDays: number; pruneAfterDays: number };
+}
+
+export const DEFAULT_AUDIT_CONFIG: AuditConfig = {
+  enabled: false,
+  summary: false,
+  retention: { compactAfterDays: 90, pruneAfterDays: 1095 },
+};
