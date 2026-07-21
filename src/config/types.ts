@@ -81,6 +81,16 @@ export const DEFAULT_AUDIT_CONFIG: AuditConfig = {
   retention: { compactAfterDays: 90, pruneAfterDays: 1095 },
 };
 
+/**
+ * Per-mapping override of the global `AuditConfig` (lives on `Mapping.audit`,
+ * wired up in the mapping-override task). Unset fields fall back to the
+ * global config.
+ */
+export interface MappingAuditOverride {
+  enabled?: boolean;
+  summary?: boolean;
+}
+
 /** Input/output token counts for one Claude call. */
 export interface TokenUsage {
   input: number;
