@@ -86,3 +86,26 @@ export interface TokenUsage {
   input: number;
   output: number;
 }
+
+/** One audited Claude invocation. */
+export interface AuditRecord {
+  id: string;
+  ts: string;
+  slackTs: string;
+  durationMs: number;
+  user: string | null;
+  userName: string | null;
+  channel: string;
+  channelName: string | null;
+  threadTs: string | null;
+  identity: string;
+  workspace: string;
+  sessionId: string | null;
+  sessionRef: string | null;
+  outcome: "success" | "error";
+  error: string | null;
+  tokens: TokenUsage;
+  summaryTokens: TokenUsage | null;
+  summary: string | null;
+  summaryError: string | null;
+}
