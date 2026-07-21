@@ -455,6 +455,60 @@ process.stdin.on("end", () => {
   });
 });
 
+describe("audit capture", () => {
+  it("records a success audit activity after replying", async () => {
+    const { deps } = setup({ trigger: "auto" });
+    const recorded: unknown[] = [];
+    deps.audit = { record: (a) => recorded.push(a) };
+    deps.invoke = async () => ({
+      text: "reply",
+      sessionId: "s1",
+      usage: { input: 7, output: 3 },
+    });
+
+    await handleInbound(deps, msg({ text: "hello" }));
+
+    expect(recorded).toHaveLength(1);
+    expect(recorded[0]).toMatchObject({
+      outcome: "success",
+      identity: "auth-investigator",
+      channel: "C1",
+      tokens: { input: 7, output: 3 },
+      prompt: "hello",
+      response: "reply",
+      sessionId: "s1",
+    });
+    expect(typeof (recorded[0] as { durationMs: number }).durationMs).toBe("number");
+  });
+
+  it("records an error audit activity when invocation fails", async () => {
+    const { deps } = setup({ trigger: "auto" });
+    const recorded: unknown[] = [];
+    deps.audit = { record: (a) => recorded.push(a) };
+    deps.invoke = async () => {
+      throw new Error("boom");
+    };
+
+    await handleInbound(deps, msg({ text: "hello" }));
+
+    expect(recorded).toHaveLength(1);
+    expect(recorded[0]).toMatchObject({
+      outcome: "error",
+      error: expect.stringContaining("boom"),
+    });
+  });
+
+  it("does not record when there is no actionable content", async () => {
+    const { deps } = setup({ trigger: "auto" });
+    const recorded: unknown[] = [];
+    deps.audit = { record: (a) => recorded.push(a) };
+
+    await handleInbound(deps, msg({ text: "" })); // empty prompt, no files
+
+    expect(recorded).toHaveLength(0);
+  });
+});
+
 describe("Slack sender prefix", () => {
   it("does not prefix the prompt when slackPrefix is disabled", async () => {
     const { deps, invokes } = setup({ trigger: "auto", slackPrefix: false });
