@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { loadEnv } from "./config/env.js";
 import { platformDirs } from "./config/platform.js";
 import { createRootLogger } from "./logger.js";
-import { resolveHome } from "./config/paths.js";
+import { auditDir, resolveHome } from "./config/paths.js";
 import { MissingCredentialsError, claudeBin, loadCredentials } from "./config/credentials.js";
 import { MappingStore } from "./config/mappings.js";
 import { AuditConfigStore } from "./config/audit-config.js";
@@ -68,6 +68,9 @@ export async function runBridge(opts: RunBridgeOptions = {}): Promise<void> {
   const userResolver = createUserResolver(creds.botToken, logger);
 
   const auditConfig = AuditConfigStore.load(home).get();
+  logger.info(
+    `audit trail ${auditConfig.enabled ? "enabled" : "disabled"} — data dir: ${auditDir(home)}`,
+  );
   const channelResolver = createChannelResolver(creds.botToken, logger);
   const auditStore = new AuditStore(home);
   if (auditConfig.enabled) writeAuditClaudeMd(home); // keep the query guide current

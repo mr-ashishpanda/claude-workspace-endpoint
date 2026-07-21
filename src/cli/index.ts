@@ -9,7 +9,7 @@ import { platformDirs } from "../config/platform.js";
 import { MissingCredentialsError, loadCredentials } from "../config/credentials.js";
 import { MappingStore, MappingValidationError } from "../config/mappings.js";
 import { AuditConfigStore } from "../config/audit-config.js";
-import { resolveHome } from "../config/paths.js";
+import { auditDir, resolveHome } from "../config/paths.js";
 import { SESSION_SCOPES, TRIGGER_MODES, CLAUDE_MODELS } from "../config/types.js";
 import { readRunningPid } from "../daemon/pidfile.js";
 import { waitForReady } from "../daemon/wait-for-ready.js";
@@ -17,6 +17,7 @@ import { checkChannelAccess } from "../slack/channel-check.js";
 import { Prompter } from "./prompt.js";
 import { runLogs } from "./logs.js";
 import { runAudit, runAuditMaintenance } from "./audit.js";
+import { writeAuditClaudeMd } from "../audit/claude-md.js";
 
 const SKIP_PERMISSIONS_WARNING =
   "Skip permission prompts (--dangerously-skip-permissions)?\n" +
@@ -94,9 +95,14 @@ async function cmdInit(): Promise<void> {
       );
     }
     AuditConfigStore.load(resolve(home)).set({ enabled: auditEnabled, summary: auditSummary });
+    if (auditEnabled) writeAuditClaudeMd(resolve(home));
 
     process.stdout.write(
       `Wrote ${envPath}. Storage will live under ${resolve(home)}.\n` +
+        (auditEnabled
+          ? `Audit trail enabled — records will be written under ${auditDir(resolve(home))} ` +
+            "(a query guide was placed there as CLAUDE.md).\n"
+          : "") +
         "Next: `slack-claude map add`, then `slack-claude run`.\n",
     );
   } finally {
