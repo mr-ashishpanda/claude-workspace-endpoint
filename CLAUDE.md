@@ -46,6 +46,8 @@ First time: `npm install`.
 - One logger that always prefixes the mapping identity.
 - Secrets only via env (`.env`, gitignored). `.env` and lockfile edits are blocked by a hook —
   ask the user to make those edits.
+- **Releases** are cut by pushing a `v<x.y.z>` git tag; **bump `package.json` `version` to match
+  first** — CI fails the release when the tag and `package.json` version disagree.
 
 ## Operating rules (non-negotiable)
 
