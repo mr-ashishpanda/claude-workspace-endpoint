@@ -43,6 +43,8 @@ export interface Mapping {
    * Absolute path; omitted ⇒ inherit the bridge process's environment.
    */
   claudeConfigDir?: string;
+  /** Per-mapping audit override; absent fields inherit the global audit config. */
+  audit?: MappingAuditOverride;
 }
 
 /** Persisted Claude session for one scope key. */
