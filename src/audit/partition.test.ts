@@ -45,7 +45,7 @@ it("appends to the day partition and reads it back", () => {
 
 it("skips malformed lines", async () => {
   const home = tmp();
-  const store = new AuditStore(home);
+  const store = new AuditStore(home, () => new Date("2026-07-21T10:00:00.000Z"));
   store.append(rec({ id: "good", ts: "2026-07-21T10:00:00.000Z" }));
   // Corrupt the partition by appending junk directly.
   const { appendFileSync } = await import("node:fs");
