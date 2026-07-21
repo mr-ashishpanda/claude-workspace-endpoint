@@ -522,11 +522,11 @@ describe("Slack sender prefix", () => {
     expect(invokes[0]!.prompt).toBe("[Slack: U1] deploy failed");
   });
 
-  it("prefixes with the resolved display name when resolveUser is provided", async () => {
+  it("prefixes with both the resolved display name and the user id when resolveUser is provided", async () => {
     const { deps, invokes } = setup({ trigger: "auto", slackPrefix: true });
     deps.resolveUser = async (id) => `name-for-${id}`;
     await handleInbound(deps, msg({ text: "deploy failed", user: "U1" }));
-    expect(invokes[0]!.prompt).toBe("[Slack: name-for-U1] deploy failed");
+    expect(invokes[0]!.prompt).toBe("[Slack: name-for-U1 (U1)] deploy failed");
   });
 
   it("prefixes an image-only message with the bare tag before the image note", async () => {

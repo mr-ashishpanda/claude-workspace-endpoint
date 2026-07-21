@@ -28,6 +28,20 @@ jobs:
           node-version: "20"
           cache: npm
 
+      # On a `v*` tag push, the tag must match package.json's version — otherwise
+      # the release would ship a tarball whose internal version disagrees with the
+      # release name. Fail fast, before building.
+      - name: Verify tag matches package.json version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          pkg_version="$(node -p "require('./package.json').version")"
+          tag_version="${GITHUB_REF_NAME#v}"
+          if [ "$pkg_version" != "$tag_version" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match package.json version $pkg_version — bump package.json before tagging."
+            exit 1
+          fi
+          echo "Version check OK: package.json $pkg_version matches tag $GITHUB_REF_NAME"
+
       # `npm ci` runs the `prepare` script, which builds dist/. Running the full
       # gate and an explicit build afterwards keeps failures easy to localize.
       - run: npm ci
