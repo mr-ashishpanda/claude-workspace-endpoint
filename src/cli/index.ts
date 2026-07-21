@@ -15,6 +15,7 @@ import { waitForReady } from "../daemon/wait-for-ready.js";
 import { checkChannelAccess } from "../slack/channel-check.js";
 import { Prompter } from "./prompt.js";
 import { runLogs } from "./logs.js";
+import { runAudit, runAuditMaintenance } from "./audit.js";
 
 const SKIP_PERMISSIONS_WARNING =
   "Skip permission prompts (--dangerously-skip-permissions)?\n" +
@@ -37,6 +38,8 @@ function usage(): void {
       "  slack-claude map list             List configured mappings",
       "  slack-claude map edit <identity>  Edit an existing mapping",
       "  slack-claude map remove <identity> Remove a mapping",
+      "  slack-claude audit [--user U] [--channel C] [--since D]  Show the audit trail",
+      "  slack-claude audit compact|rollup|prune                  Audit retention maintenance",
       "",
     ].join("\n") + "\n",
   );
@@ -335,6 +338,12 @@ async function main(): Promise<void> {
       } else {
         usage();
         process.exitCode = 1;
+      }
+    } else if (cmd === "audit") {
+      if (sub === "compact" || sub === "rollup" || sub === "prune") {
+        runAuditMaintenance(sub, process.argv.slice(4));
+      } else {
+        runAudit(process.argv.slice(3));
       }
     } else {
       usage();
