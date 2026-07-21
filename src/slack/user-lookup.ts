@@ -12,7 +12,7 @@ export interface UserLookupClient {
 
 /**
  * Resolves a Slack user id to a human-readable display name, for the
- * `[Slack: <name>]` prefix. Caches successful lookups in memory for the
+ * `[Slack: <name> (<id>)]` prefix. Caches successful lookups in memory for the
  * process lifetime (Slack user ids and their display names are effectively
  * static for a running bridge). A lookup that throws (rate limit, missing
  * `users:read` scope, network error) falls back to the raw id and is
