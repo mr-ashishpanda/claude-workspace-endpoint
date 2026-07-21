@@ -80,3 +80,9 @@ export const DEFAULT_AUDIT_CONFIG: AuditConfig = {
   summary: false,
   retention: { compactAfterDays: 90, pruneAfterDays: 1095 },
 };
+
+/** Input/output token counts for one Claude call. */
+export interface TokenUsage {
+  input: number;
+  output: number;
+}

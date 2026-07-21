@@ -261,7 +261,7 @@ describe("makeMessageHandler (Bolt glue → chat.postMessage)", () => {
       sessions,
       logger: new Logger("test", {}),
       claudeBin: "claude",
-      invoke: async () => ({ text: "reply", sessionId: "s1" }),
+      invoke: async () => ({ text: "reply", sessionId: "s1", usage: { input: 0, output: 0 } }),
     };
     const handler = makeMessageHandler(deps, () => BOT);
     return { handler, client, calls, home };
@@ -322,7 +322,7 @@ describe("makeMessageHandler (Bolt glue → chat.postMessage)", () => {
       sessions,
       logger: new Logger("test", {}),
       claudeBin: "claude",
-      invoke: async () => ({ text: "reply", sessionId: "s1" }),
+      invoke: async () => ({ text: "reply", sessionId: "s1", usage: { input: 0, output: 0 } }),
     };
     const handler = makeMessageHandler(deps, () => BOT);
     await handler({ channel: "C1", ts: "100.1", text: "deploy failed" }, client);
