@@ -97,3 +97,34 @@ it("writes summaryError and still records when summarizer throws", async () => {
     summaryError: expect.stringContaining("rate limited"),
   });
 });
+
+it("override summary=true beats global summary=false", async () => {
+  const { rec, written } = harness({ enabled: true, summary: false });
+  rec.record({ ...base, auditOverride: { summary: true } });
+  await rec.drain();
+  expect(written).toHaveLength(1);
+  expect(written[0]).toMatchObject({
+    summary: "did a thing",
+    summaryTokens: { input: 5, output: 3 },
+  });
+});
+
+it("override enabled=false beats global enabled=true (no record)", async () => {
+  const { rec, written } = harness({ enabled: true });
+  rec.record({ ...base, auditOverride: { enabled: false } });
+  await rec.drain();
+  expect(written).toHaveLength(0);
+});
+
+it("error outcome does not summarize even when response is present", async () => {
+  const { rec, written } = harness({ enabled: true, summary: true });
+  rec.record({
+    ...base,
+    outcome: "error",
+    error: "boom",
+    response: "some response text",
+  });
+  await rec.drain();
+  expect(written).toHaveLength(1);
+  expect(written[0]).toMatchObject({ outcome: "error", error: "boom", summary: null });
+});
