@@ -1,6 +1,18 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import { AuditRecord } from "../config/types.js";
-import { filterRecords, formatLine, toCsvRow, CSV_HEADER, parseOlderThanDays } from "./audit.js";
+import { auditPartitionPath } from "../config/paths.js";
+import {
+  filterRecords,
+  formatLine,
+  toCsvRow,
+  CSV_HEADER,
+  parseOlderThanDays,
+  parseFilterDate,
+  runAuditMaintenance,
+} from "./audit.js";
 
 function rec(over: Partial<AuditRecord> = {}): AuditRecord {
   return {
@@ -170,5 +182,90 @@ describe("parseOlderThanDays", () => {
   it("throws on an invalid value", () => {
     expect(() => parseOlderThanDays("abc")).toThrow();
     expect(() => parseOlderThanDays("")).toThrow();
+  });
+});
+
+describe("parseFilterDate", () => {
+  it("parses a valid ISO date", () => {
+    const date = parseFilterDate("--since", "2026-07-01");
+    expect(date.getTime()).not.toBeNaN();
+  });
+
+  it("throws a friendly error on an invalid date", () => {
+    expect(() => parseFilterDate("--since", "not-a-date")).toThrow(
+      'Invalid --since date: "not-a-date"',
+    );
+    expect(() => parseFilterDate("--until", "not-a-date")).toThrow(
+      'Invalid --until date: "not-a-date"',
+    );
+  });
+});
+
+function tmpHome(): string {
+  return mkdtempSync(join(tmpdir(), "audit-cli-"));
+}
+
+/** Write a raw partition file directly (bypassing AuditStore) at the date's path. */
+function writePartition(home: string, date: Date): string {
+  const path = auditPartitionPath(home, date);
+  mkdirSync(dirname(path), { recursive: true });
+  const record: AuditRecord = {
+    id: "aud_1",
+    ts: date.toISOString(),
+    slackTs: "1",
+    durationMs: 5,
+    user: "U1",
+    userName: "Ann",
+    channel: "C1",
+    channelName: "#c",
+    threadTs: null,
+    identity: "id1",
+    workspace: "/w",
+    sessionId: "s1",
+    sessionRef: null,
+    outcome: "success",
+    error: null,
+    tokens: { input: 1, output: 2 },
+    summaryTokens: null,
+    summary: null,
+    summaryError: null,
+  };
+  writeFileSync(path, JSON.stringify(record) + "\n");
+  return path;
+}
+
+describe("runAuditMaintenance prune", () => {
+  const OLD_DATE = new Date("2000-01-01T00:00:00.000Z");
+  let previousHome: string | undefined;
+
+  afterEach(() => {
+    if (previousHome === undefined) delete process.env.SLACK_CLAUDE_HOME;
+    else process.env.SLACK_CLAUDE_HOME = previousHome;
+  });
+
+  it("is a no-op without --yes: the old partition still exists", () => {
+    const home = tmpHome();
+    previousHome = process.env.SLACK_CLAUDE_HOME;
+    process.env.SLACK_CLAUDE_HOME = home;
+
+    const oldPath = writePartition(home, OLD_DATE);
+
+    runAuditMaintenance("prune", ["--older-than", "1"]);
+
+    expect(existsSync(oldPath)).toBe(true);
+  });
+
+  it("with --yes removes the old partition and writes its month's rollup first", () => {
+    const home = tmpHome();
+    previousHome = process.env.SLACK_CLAUDE_HOME;
+    process.env.SLACK_CLAUDE_HOME = home;
+
+    const oldPath = writePartition(home, OLD_DATE);
+    const rollupPath = join(home, "audit", "2000", "01.rollup.json");
+
+    runAuditMaintenance("prune", ["--older-than", "1", "--yes"]);
+
+    expect(existsSync(oldPath)).toBe(false);
+    expect(existsSync(rollupPath)).toBe(true);
   });
 });

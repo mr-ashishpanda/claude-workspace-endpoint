@@ -1,10 +1,10 @@
+import { basename } from "node:path";
 import { AuditStore } from "../audit/partition.js";
-import { compact, prune, rollup } from "../audit/maintenance.js";
+import { compact, partitionsToPrune, prune, rollup } from "../audit/maintenance.js";
 import { AuditConfigStore } from "../config/audit-config.js";
 import { resolveHome } from "../config/paths.js";
 import { AuditRecord } from "../config/types.js";
 
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const SUMMARY_TRUNCATE_LEN = 80;
 
 /** Filter options for the `audit` query command. All conditions are AND'd. */
@@ -93,6 +93,15 @@ export function parseOlderThanDays(value: string): number {
   return Number(match[1]);
 }
 
+/** Parse a `--since`/`--until` date value; throws a friendly error if it isn't a valid date. */
+export function parseFilterDate(flag: "--since" | "--until", raw: string): Date {
+  const date = new Date(raw);
+  if (isNaN(date.getTime())) {
+    throw new Error(`Invalid ${flag} date: "${raw}"`);
+  }
+  return date;
+}
+
 interface AuditQueryFlags {
   user?: string;
   channel?: string;
@@ -119,12 +128,12 @@ function parseAuditQueryArgs(args: string[]): AuditQueryFlags {
         break;
       case "--since": {
         const raw = args[++i];
-        if (raw) flags.since = new Date(raw);
+        if (raw) flags.since = parseFilterDate("--since", raw);
         break;
       }
       case "--until": {
         const raw = args[++i];
-        if (raw) flags.until = new Date(raw);
+        if (raw) flags.until = parseFilterDate("--until", raw);
         break;
       }
       case "--json":
@@ -147,6 +156,8 @@ function parseAuditQueryArgs(args: string[]): AuditQueryFlags {
 export function runAudit(args: string[]): void {
   const flags = parseAuditQueryArgs(args);
   const home = resolveHome();
+  // read() pre-filters by since/until (partition-level); filterRecords re-applies
+  // the same bounds precisely alongside the other filters. Harmless double-filtering.
   const all = new AuditStore(home).read({ since: flags.since, until: flags.until });
   const records = filterRecords(all, {
     user: flags.user,
@@ -179,16 +190,18 @@ function findFlagValue(args: string[], flag: string): string | undefined {
   return args[idx + 1];
 }
 
-/** Distinct `YYYY-MM` (UTC) months represented among `records`. */
-function distinctMonths(records: AuditRecord[]): string[] {
-  const months = new Set<string>();
-  for (const r of records) {
-    const d = new Date(r.ts);
-    const y = String(d.getUTCFullYear());
-    const m = String(d.getUTCMonth() + 1).padStart(2, "0");
-    months.add(`${y}-${m}`);
-  }
-  return [...months].sort();
+const PARTITION_FILENAME_RE = /^(\d{4})-(\d{2})-\d{2}\.jsonl(\.gz)?$/;
+
+/** Parse a partition path's `YYYY-MM-DD.jsonl[.gz]` basename into its `YYYY-MM` month. */
+function monthOfPartitionPath(path: string): string {
+  const match = PARTITION_FILENAME_RE.exec(basename(path));
+  if (!match) throw new Error(`Not a partition file path: "${path}"`);
+  return `${match[1]}-${match[2]}`;
+}
+
+/** Distinct `YYYY-MM` months among a set of partition paths, e.g. from {@link partitionsToPrune}. */
+function distinctMonthsOfPartitions(paths: string[]): string[] {
+  return [...new Set(paths.map(monthOfPartitionPath))].sort();
 }
 
 function runCompact(home: string, args: string[]): void {
@@ -222,20 +235,22 @@ function runPrune(home: string, args: string[]): void {
     : AuditConfigStore.load(home).get().retention.pruneAfterDays;
   const yes = args.includes("--yes");
 
-  const cutoff = new Date(Date.now() - days * MS_PER_DAY);
-  const wouldRemove = new AuditStore(home).read({ until: cutoff });
+  // The exact set of partitions `prune` would delete — the single source of
+  // truth used for both the dry-run advisory and the months rolled up below,
+  // so they can never disagree with what actually gets removed.
+  const targets = partitionsToPrune(home, days);
 
   if (!yes) {
     process.stdout.write(
-      wouldRemove.length === 0
-        ? `No audit records older than ${days}d to prune.\n`
-        : `Would prune ${wouldRemove.length} audit record(s) older than ${days}d. ` +
+      targets.length === 0
+        ? `No partitions older than ${days}d to prune.\n`
+        : `Would prune ${targets.length} partition(s) older than ${days}d. ` +
             "Re-run with --yes to actually delete (monthly rollups are written first).\n",
     );
     return;
   }
 
-  for (const month of distinctMonths(wouldRemove)) {
+  for (const month of distinctMonthsOfPartitions(targets)) {
     rollup(home, month);
   }
   const removed = prune(home, days);

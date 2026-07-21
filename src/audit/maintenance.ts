@@ -70,6 +70,25 @@ export function compact(
 }
 
 /**
+ * Raw partition file paths (`.jsonl` and `.jsonl.gz`) strictly older than
+ * `now() - olderThanDays`. This is the single source of truth for "which
+ * partitions are old enough to prune" — `prune` deletes exactly this set, and
+ * callers (e.g. the CLI) can use it to compute which months to roll up before
+ * pruning, and what would be removed in a dry run, without the two ever
+ * disagreeing. Never includes `*.rollup.json`.
+ */
+export function partitionsToPrune(
+  home: string,
+  olderThanDays: number,
+  now: () => Date = () => new Date(),
+): string[] {
+  const cutoff = cutoffDate(olderThanDays, now);
+  return enumeratePartitions(home)
+    .filter((entry) => entry.date.getTime() < cutoff.getTime())
+    .map((entry) => entry.path);
+}
+
+/**
  * Delete every raw partition (`.jsonl` and `.jsonl.gz`) whose date is strictly
  * older than `now() - olderThanDays`. Never touches `*.rollup.json`. Returns
  * the removed paths.
@@ -79,12 +98,10 @@ export function prune(
   olderThanDays: number,
   now: () => Date = () => new Date(),
 ): string[] {
-  const cutoff = cutoffDate(olderThanDays, now);
   const removed: string[] = [];
-  for (const entry of enumeratePartitions(home)) {
-    if (entry.date.getTime() >= cutoff.getTime()) continue;
-    rmSync(entry.path);
-    removed.push(entry.path);
+  for (const path of partitionsToPrune(home, olderThanDays, now)) {
+    rmSync(path);
+    removed.push(path);
   }
   return removed;
 }
