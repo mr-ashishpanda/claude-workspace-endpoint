@@ -80,6 +80,41 @@ describe("validateMapping", () => {
     const m = validateMapping({ ...base, claudeConfigDir: "~/.claude-work" });
     expect(m.claudeConfigDir).toBe(join(homedir(), ".claude-work"));
   });
+
+  it("defaults audit override to absent for mappings without it", () => {
+    const m = validateMapping({
+      identity: "a",
+      channel: "C1",
+      workspace: "/w",
+      scope: "channel",
+      trigger: "mention",
+    });
+    expect(m.audit).toBeUndefined();
+  });
+
+  it("round-trips an audit override", () => {
+    const m = validateMapping({
+      identity: "a",
+      channel: "C1",
+      workspace: "/w",
+      scope: "channel",
+      trigger: "mention",
+      audit: { enabled: true, summary: false },
+    });
+    expect(m.audit).toEqual({ enabled: true, summary: false });
+  });
+
+  it("omits an empty audit override object", () => {
+    const m = validateMapping({
+      identity: "a",
+      channel: "C1",
+      workspace: "/w",
+      scope: "channel",
+      trigger: "mention",
+      audit: {},
+    });
+    expect(m.audit).toBeUndefined();
+  });
 });
 
 describe("MappingStore CRUD + persistence", () => {

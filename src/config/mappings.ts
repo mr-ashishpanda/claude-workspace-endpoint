@@ -9,6 +9,7 @@ import {
   SessionScope,
   TriggerMode,
   ClaudeModel,
+  MappingAuditOverride,
 } from "./types.js";
 import { mappingsPath, resolveHome } from "./paths.js";
 
@@ -77,6 +78,14 @@ export function validateMapping(input: Partial<Mapping>): Mapping {
       : configDirRaw;
   const claudeConfigDir = configDirExpanded ? resolve(configDirExpanded) : undefined;
 
+  // Per-mapping audit override: keep only booleans that are actually set, and
+  // drop an empty object so "inherit global" stays the default representation.
+  const auditIn = input.audit ?? {};
+  const audit: MappingAuditOverride = {};
+  if (typeof auditIn.enabled === "boolean") audit.enabled = auditIn.enabled;
+  if (typeof auditIn.summary === "boolean") audit.summary = auditIn.summary;
+  const hasAudit = Object.keys(audit).length > 0;
+
   return {
     identity,
     channel,
@@ -87,6 +96,7 @@ export function validateMapping(input: Partial<Mapping>): Mapping {
     skipPermissions,
     slackPrefix,
     ...(claudeConfigDir ? { claudeConfigDir } : {}),
+    ...(hasAudit ? { audit } : {}),
   };
 }
 

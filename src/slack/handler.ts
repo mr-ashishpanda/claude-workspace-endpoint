@@ -4,6 +4,7 @@ import { MappingStore } from "../config/mappings.js";
 import { SessionStore } from "../session/store.js";
 import { KeyedSerializer } from "../session/serializer.js";
 import { ClaudeResult, ProcessRunner, invokeClaude } from "../claude/invoke.js";
+import { ActivityInput } from "../audit/recorder.js";
 import { MediaStore } from "../session/media.js";
 import { InboundMessage, route } from "./router.js";
 import { formatStatus, withIdentity, withSessionHeader } from "./status.js";
@@ -81,6 +82,8 @@ export interface HandlerDeps {
     claudeConfigDir?: string;
     runner?: ProcessRunner;
   }) => Promise<ClaudeResult>;
+  /** Records an audit activity per invocation (fire-and-forget). Absent ⇒ no auditing. */
+  audit?: { record(activity: ActivityInput): void };
 }
 
 /**
@@ -165,6 +168,29 @@ export async function handleInbound(deps: HandlerDeps, msg: InboundMessage): Pro
           return;
         }
 
+        const auditPrompt = rawPrompt;
+        const startedAt = Date.now();
+        const auditBase = {
+          slackTs: msg.ts,
+          user: msg.user,
+          channel: msg.channel,
+          threadTs: decision.replyThreadTs,
+          identity: mapping.identity,
+          workspace: mapping.workspace,
+          claudeConfigDir: mapping.claudeConfigDir,
+          prompt: auditPrompt,
+          auditOverride: mapping.audit,
+        };
+        const recordError = (message: string): void =>
+          deps.audit?.record({
+            ...auditBase,
+            durationMs: Date.now() - startedAt,
+            outcome: "error",
+            error: message,
+            sessionId: null,
+            tokens: { input: 0, output: 0 },
+          });
+
         const taggedPrompt = mapping.slackPrefix
           ? await withSlackPrefix(rawPrompt, msg.user, deps.resolveUser)
           : rawPrompt;
@@ -215,6 +241,7 @@ export async function handleInbound(deps: HandlerDeps, msg: InboundMessage): Pro
               withIdentity(mapping.identity, `:warning: Claude invocation failed: ${message}`),
               decision.replyThreadTs,
             );
+            recordError(message);
             return;
           }
           log.warn(`resume of ${priorId} failed (${message}); starting a fresh session`);
@@ -228,6 +255,7 @@ export async function handleInbound(deps: HandlerDeps, msg: InboundMessage): Pro
               withIdentity(mapping.identity, `:warning: Claude invocation failed: ${message2}`),
               decision.replyThreadTs,
             );
+            recordError(message2);
             return;
           }
         }
@@ -249,6 +277,14 @@ export async function handleInbound(deps: HandlerDeps, msg: InboundMessage): Pro
         await deps.post(msg.channel, body, decision.replyThreadTs);
         log.info(`replied to session ${key}`);
         succeeded = true;
+        deps.audit?.record({
+          ...auditBase,
+          durationMs: Date.now() - startedAt,
+          outcome: "success",
+          sessionId: result.sessionId,
+          tokens: result.usage,
+          response: result.text,
+        });
       }
     };
 

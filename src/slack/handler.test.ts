@@ -50,7 +50,7 @@ function setup(
     resumeSessionId: string | null;
   }): Promise<ClaudeResult> => {
     invokes.push({ prompt: a.prompt, resume: a.resumeSessionId });
-    return { text: "claude reply", sessionId: "sess_new" };
+    return { text: "claude reply", sessionId: "sess_new", usage: { input: 0, output: 0 } };
   };
   const downloads: string[] = [];
   const download = async (f: SlackFile): Promise<Buffer> => {
@@ -127,7 +127,7 @@ describe("handleInbound", () => {
     deps.invoke = async (a) => {
       attempts.push(a.resumeSessionId);
       if (a.resumeSessionId) throw new Error("claude exited with code 1"); // stale resume fails
-      return { text: "fresh answer", sessionId: "brand-new-id" };
+      return { text: "fresh answer", sessionId: "brand-new-id", usage: { input: 0, output: 0 } };
     };
 
     await handleInbound(deps, msg({ text: "hello again" }));
@@ -150,7 +150,7 @@ describe("handleInbound", () => {
     const attempts: (string | null)[] = [];
     deps.invoke = async (a) => {
       attempts.push(a.resumeSessionId);
-      return { text: "ok", sessionId: "id-under-default" };
+      return { text: "ok", sessionId: "id-under-default", usage: { input: 0, output: 0 } };
     };
 
     await handleInbound(deps, msg({ text: "hi" }));
@@ -182,7 +182,7 @@ describe("handleInbound", () => {
       post: async () => {},
       invoke: async (a) => {
         seen.push({ resume: a.resumeSessionId, cfg: a.claudeConfigDir });
-        return { text: "r", sessionId: "s1" };
+        return { text: "r", sessionId: "s1", usage: { input: 0, output: 0 } };
       },
     };
     await handleInbound(deps, msg({ text: "hi" }));
@@ -433,7 +433,7 @@ process.stdin.on("end", () => {
     const invoke = async (a: { resumeSessionId: string | null }): Promise<ClaudeResult> => {
       invokes.push(a.resumeSessionId);
       await new Promise((r) => setTimeout(r, 5));
-      return { text: "reply", sessionId: "sess_new" };
+      return { text: "reply", sessionId: "sess_new", usage: { input: 0, output: 0 } };
     };
     const deps: HandlerDeps = {
       mappings,
@@ -452,6 +452,60 @@ process.stdin.on("end", () => {
 
     expect(invokes).toEqual([null, "sess_new"]); // first new, second resumes
     expect(sessions.get("C1")?.messagesProcessed).toBe(2);
+  });
+});
+
+describe("audit capture", () => {
+  it("records a success audit activity after replying", async () => {
+    const { deps } = setup({ trigger: "auto" });
+    const recorded: unknown[] = [];
+    deps.audit = { record: (a) => recorded.push(a) };
+    deps.invoke = async () => ({
+      text: "reply",
+      sessionId: "s1",
+      usage: { input: 7, output: 3 },
+    });
+
+    await handleInbound(deps, msg({ text: "hello" }));
+
+    expect(recorded).toHaveLength(1);
+    expect(recorded[0]).toMatchObject({
+      outcome: "success",
+      identity: "auth-investigator",
+      channel: "C1",
+      tokens: { input: 7, output: 3 },
+      prompt: "hello",
+      response: "reply",
+      sessionId: "s1",
+    });
+    expect(typeof (recorded[0] as { durationMs: number }).durationMs).toBe("number");
+  });
+
+  it("records an error audit activity when invocation fails", async () => {
+    const { deps } = setup({ trigger: "auto" });
+    const recorded: unknown[] = [];
+    deps.audit = { record: (a) => recorded.push(a) };
+    deps.invoke = async () => {
+      throw new Error("boom");
+    };
+
+    await handleInbound(deps, msg({ text: "hello" }));
+
+    expect(recorded).toHaveLength(1);
+    expect(recorded[0]).toMatchObject({
+      outcome: "error",
+      error: expect.stringContaining("boom"),
+    });
+  });
+
+  it("does not record when there is no actionable content", async () => {
+    const { deps } = setup({ trigger: "auto" });
+    const recorded: unknown[] = [];
+    deps.audit = { record: (a) => recorded.push(a) };
+
+    await handleInbound(deps, msg({ text: "" })); // empty prompt, no files
+
+    expect(recorded).toHaveLength(0);
   });
 });
 

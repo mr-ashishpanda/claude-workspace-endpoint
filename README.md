@@ -133,14 +133,21 @@ Slack event for that mapping.
 Installed as a CLI, the bridge stores everything in per-user directories, so it behaves the same
 no matter which directory you launch it from (no `.env` in the current directory required):
 
-| Purpose                     | Linux (XDG)                         | macOS                                         | Windows                             |
-| --------------------------- | ----------------------------------- | --------------------------------------------- | ----------------------------------- |
-| Credentials (`.env`)        | `~/.config/slack-claude/`           | `~/Library/Application Support/slack-claude/` | `%APPDATA%\slack-claude\Config\`    |
-| Mappings + sessions + media | `~/.local/state/slack-claude/`      | `~/Library/Application Support/slack-claude/` | `%LOCALAPPDATA%\slack-claude\Data\` |
-| Log file                    | `~/.local/state/slack-claude/logs/` | `~/Library/Logs/slack-claude/`                | `%LOCALAPPDATA%\slack-claude\Log\`  |
+| Purpose                     | Linux (XDG)                          | macOS                                               | Windows                                   |
+| --------------------------- | ------------------------------------ | --------------------------------------------------- | ----------------------------------------- |
+| Credentials (`.env`)        | `~/.config/slack-claude/`            | `~/Library/Application Support/slack-claude/`       | `%APPDATA%\slack-claude\Config\`          |
+| Mappings + sessions + media | `~/.local/state/slack-claude/`       | `~/Library/Application Support/slack-claude/`       | `%LOCALAPPDATA%\slack-claude\Data\`       |
+| Audit trail                 | `~/.local/state/slack-claude/audit/` | `~/Library/Application Support/slack-claude/audit/` | `%LOCALAPPDATA%\slack-claude\Data\audit\` |
+| Log file                    | `~/.local/state/slack-claude/logs/`  | `~/Library/Logs/slack-claude/`                      | `%LOCALAPPDATA%\slack-claude\Log\`        |
 
 The log file rotates automatically once it passes `LOG_MAX_SIZE` (default 5 MiB), keeping
 `LOG_MAX_FILES` archives (default 5) as `bridge.log.1 … .N`, so on-disk history stays bounded.
+
+When enabled, the audit trail records who did what through the bridge as append-only,
+date-partitioned JSONL under `SLACK_CLAUDE_HOME/audit/YYYY/MM/…`, alongside a self-describing
+`audit/CLAUDE.md` query guide kept there for exploring it with `claude`. Read it back with
+`slack-claude audit` (filter with `--user`/`--channel`/`--since`, export with `--json`/`--csv`),
+and manage retention with `slack-claude audit compact|rollup|prune`.
 
 Overrides: `SLACK_CLAUDE_HOME` relocates the storage root and `LOG_FILE` the log file. Any real
 environment variable, or a project-local `.env` (handy when developing from a clone), takes

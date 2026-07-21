@@ -1,6 +1,6 @@
 {
   "name": "slack-claude-bridge",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "Local-first bridge between Slack and Claude Code, scoped to per-channel workspaces.",
   "type": "module",
   "license": "MIT",

@@ -57,13 +57,39 @@ describe("buildClaudeArgs", () => {
 describe("parseClaudeOutput", () => {
   it("extracts result + session_id from JSON", () => {
     const out = parseClaudeOutput(JSON.stringify({ result: "hi", session_id: "s1" }));
-    expect(out).toEqual({ text: "hi", sessionId: "s1" });
+    expect(out).toEqual({ text: "hi", sessionId: "s1", usage: { input: 0, output: 0 } });
   });
   it("falls back to raw text on non-JSON output", () => {
-    expect(parseClaudeOutput("plain text")).toEqual({ text: "plain text", sessionId: null });
+    expect(parseClaudeOutput("plain text")).toEqual({
+      text: "plain text",
+      sessionId: null,
+      usage: { input: 0, output: 0 },
+    });
   });
   it("handles empty output", () => {
-    expect(parseClaudeOutput("   ")).toEqual({ text: "", sessionId: null });
+    expect(parseClaudeOutput("   ")).toEqual({
+      text: "",
+      sessionId: null,
+      usage: { input: 0, output: 0 },
+    });
+  });
+
+  it("extracts token usage from the JSON envelope", () => {
+    const out = JSON.stringify({
+      result: "hi",
+      session_id: "s1",
+      usage: { input_tokens: 1200, output_tokens: 88 },
+    });
+    const r = parseClaudeOutput(out);
+    expect(r.usage).toEqual({ input: 1200, output: 88 });
+  });
+
+  it("defaults usage to zeros when absent", () => {
+    expect(parseClaudeOutput(JSON.stringify({ result: "x" })).usage).toEqual({
+      input: 0,
+      output: 0,
+    });
+    expect(parseClaudeOutput("not json").usage).toEqual({ input: 0, output: 0 });
   });
 });
 
@@ -99,7 +125,7 @@ describe("invokeClaude", () => {
       resumeSessionId: null,
       runner,
     });
-    expect(res).toEqual({ text: "done", sessionId: "s9" });
+    expect(res).toEqual({ text: "done", sessionId: "s9", usage: { input: 0, output: 0 } });
     expect(captured.cwd).toBe("/repos/auth");
     expect(captured.input).toBe("investigate");
   });

@@ -8,13 +8,16 @@ import { configEnvPath, loadEnv } from "../config/env.js";
 import { platformDirs } from "../config/platform.js";
 import { MissingCredentialsError, loadCredentials } from "../config/credentials.js";
 import { MappingStore, MappingValidationError } from "../config/mappings.js";
-import { resolveHome } from "../config/paths.js";
+import { AuditConfigStore } from "../config/audit-config.js";
+import { auditDir, resolveHome } from "../config/paths.js";
 import { SESSION_SCOPES, TRIGGER_MODES, CLAUDE_MODELS } from "../config/types.js";
 import { readRunningPid } from "../daemon/pidfile.js";
 import { waitForReady } from "../daemon/wait-for-ready.js";
 import { checkChannelAccess } from "../slack/channel-check.js";
 import { Prompter } from "./prompt.js";
 import { runLogs } from "./logs.js";
+import { runAudit, runAuditMaintenance } from "./audit.js";
+import { writeAuditClaudeMd } from "../audit/claude-md.js";
 
 const SKIP_PERMISSIONS_WARNING =
   "Skip permission prompts (--dangerously-skip-permissions)?\n" +
@@ -22,6 +25,9 @@ const SKIP_PERMISSIONS_WARNING =
 
 const SLACK_PREFIX_PROMPT =
   'Tag messages to Claude with the Slack sender, e.g. "[Slack: Jane Doe (U012ABCDEF)] ..."?';
+
+const AUDIT_OVERRIDE_PROMPT =
+  "Override audit for this mapping? (No = inherit global audit settings)";
 
 function usage(): void {
   process.stdout.write(
@@ -37,6 +43,8 @@ function usage(): void {
       "  slack-claude map list             List configured mappings",
       "  slack-claude map edit <identity>  Edit an existing mapping",
       "  slack-claude map remove <identity> Remove a mapping",
+      "  slack-claude audit [--user U] [--channel C] [--since D]  Show the audit trail",
+      "  slack-claude audit compact|rollup|prune                  Audit retention maintenance",
       "",
     ].join("\n") + "\n",
   );
@@ -76,8 +84,25 @@ async function cmdInit(): Promise<void> {
     ].join("\n");
     mkdirSync(dirname(envPath), { recursive: true });
     writeFileSync(envPath, env, { mode: 0o600 });
+
+    const auditEnabled = await p.confirm("Enable the audit trail (records who did what)?", false);
+    let auditSummary = false;
+    if (auditEnabled) {
+      auditSummary = await p.confirm(
+        "Generate Claude summaries for each audit record?\n" +
+          "  Note: summaries invoke Claude and consume tokens.",
+        false,
+      );
+    }
+    AuditConfigStore.load(resolve(home)).set({ enabled: auditEnabled, summary: auditSummary });
+    if (auditEnabled) writeAuditClaudeMd(resolve(home));
+
     process.stdout.write(
       `Wrote ${envPath}. Storage will live under ${resolve(home)}.\n` +
+        (auditEnabled
+          ? `Audit trail enabled — records will be written under ${auditDir(resolve(home))} ` +
+            "(a query guide was placed there as CLAUDE.md).\n"
+          : "") +
         "Next: `slack-claude map add`, then `slack-claude run`.\n",
     );
   } finally {
@@ -136,6 +161,15 @@ async function cmdMapAdd(): Promise<void> {
     const skipPermissions = await p.confirm(SKIP_PERMISSIONS_WARNING);
     const claudeConfigDir = await p.ask("Custom CLAUDE_CONFIG_DIR (blank = bridge default)");
     const slackPrefix = await p.confirm(SLACK_PREFIX_PROMPT);
+    const auditOverride = await p.confirm(AUDIT_OVERRIDE_PROMPT, false);
+    let audit: { enabled?: boolean; summary?: boolean } | undefined;
+    if (auditOverride) {
+      const enabled = await p.confirm("  Record audit for this mapping?", true);
+      const summary = enabled
+        ? await p.confirm("  Generate summaries for this mapping? (consumes tokens)", false)
+        : false;
+      audit = { enabled, summary };
+    }
     const mapping = store.add({
       identity,
       channel,
@@ -146,6 +180,7 @@ async function cmdMapAdd(): Promise<void> {
       skipPermissions,
       claudeConfigDir,
       slackPrefix,
+      audit,
     });
     process.stdout.write(
       `Added mapping [${mapping.identity}] → ${mapping.workspace} ` +
@@ -175,7 +210,8 @@ function cmdMapList(): void {
         `  model:       ${m.model}\n` +
         `  permissions: ${m.skipPermissions ? "skipped (dangerous)" : "enforced"}\n` +
         `  slack tag:   ${m.slackPrefix ? "enabled" : "disabled"}\n` +
-        `  config dir:  ${m.claudeConfigDir ?? "(bridge default)"}\n`,
+        `  config dir:  ${m.claudeConfigDir ?? "(bridge default)"}\n` +
+        `  audit:       ${m.audit ? `override (record=${m.audit.enabled ?? "inherit"}, summary=${m.audit.summary ?? "inherit"})` : "inherit global"}\n`,
     );
   }
 }
@@ -211,6 +247,21 @@ async function cmdMapEdit(identity: string): Promise<void> {
       current.claudeConfigDir,
     );
     const slackPrefix = await p.confirm(SLACK_PREFIX_PROMPT, current.slackPrefix);
+    const auditOverride = await p.confirm(AUDIT_OVERRIDE_PROMPT, current.audit !== undefined);
+    let audit: { enabled?: boolean; summary?: boolean } | undefined;
+    if (auditOverride) {
+      const enabled = await p.confirm(
+        "  Record audit for this mapping?",
+        current.audit?.enabled ?? true,
+      );
+      const summary = enabled
+        ? await p.confirm(
+            "  Generate summaries for this mapping? (consumes tokens)",
+            current.audit?.summary ?? false,
+          )
+        : false;
+      audit = { enabled, summary };
+    }
     const updated = store.edit(identity, {
       channel,
       workspace,
@@ -220,6 +271,7 @@ async function cmdMapEdit(identity: string): Promise<void> {
       skipPermissions,
       claudeConfigDir,
       slackPrefix,
+      audit,
     });
     process.stdout.write(`Updated mapping [${updated.identity}].\n`);
   } finally {
@@ -335,6 +387,12 @@ async function main(): Promise<void> {
       } else {
         usage();
         process.exitCode = 1;
+      }
+    } else if (cmd === "audit") {
+      if (sub === "compact" || sub === "rollup" || sub === "prune") {
+        runAuditMaintenance(sub, process.argv.slice(4));
+      } else {
+        runAudit(process.argv.slice(3));
       }
     } else {
       usage();

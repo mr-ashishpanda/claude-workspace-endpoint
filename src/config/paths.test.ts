@@ -1,6 +1,14 @@
 import { describe, it, expect } from "vitest";
-import { isAbsolute, join } from "node:path";
-import { resolveHome, mappingsPath, sessionsPath, mediaDir } from "./paths.js";
+import { isAbsolute, join, resolve } from "node:path";
+import {
+  resolveHome,
+  mappingsPath,
+  sessionsPath,
+  mediaDir,
+  auditDir,
+  auditConfigPath,
+  auditPartitionPath,
+} from "./paths.js";
 
 describe("resolveHome", () => {
   it("defaults to an absolute per-user data directory", () => {
@@ -29,5 +37,18 @@ describe("mappingsPath / sessionsPath", () => {
 describe("mediaDir", () => {
   it("places downloaded media under <home>/media", () => {
     expect(mediaDir("/home/x")).toBe(join("/home/x", "media"));
+  });
+});
+
+describe("audit paths", () => {
+  it("derives audit dir and config path under home", () => {
+    expect(auditDir("/home")).toBe(resolve("/home", "audit"));
+    expect(auditConfigPath("/home")).toBe(resolve("/home", "audit-config.json"));
+  });
+  it("partitions by UTC year/month/day", () => {
+    const d = new Date("2026-07-21T23:30:00.000Z");
+    expect(auditPartitionPath("/home", d)).toBe(
+      resolve("/home", "audit", "2026", "07", "2026-07-21.jsonl"),
+    );
   });
 });

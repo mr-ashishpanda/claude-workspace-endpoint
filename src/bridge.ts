@@ -2,16 +2,22 @@ import { join } from "node:path";
 import { loadEnv } from "./config/env.js";
 import { platformDirs } from "./config/platform.js";
 import { createRootLogger } from "./logger.js";
-import { resolveHome } from "./config/paths.js";
+import { auditDir, resolveHome } from "./config/paths.js";
 import { MissingCredentialsError, claudeBin, loadCredentials } from "./config/credentials.js";
 import { MappingStore } from "./config/mappings.js";
+import { AuditConfigStore } from "./config/audit-config.js";
 import { SessionStore } from "./session/store.js";
 import { KeyedSerializer } from "./session/serializer.js";
 import { MediaStore } from "./session/media.js";
 import { createSlackApp } from "./slack/app.js";
 import { createFileDownloader } from "./slack/download.js";
 import { createUserResolver } from "./slack/user-lookup.js";
+import { createChannelResolver } from "./slack/channel-lookup.js";
 import { removePidFile, writePidFile } from "./daemon/pidfile.js";
+import { AuditStore } from "./audit/partition.js";
+import { AuditRecorder } from "./audit/recorder.js";
+import { summarizeActivity } from "./audit/summarize.js";
+import { writeAuditClaudeMd } from "./audit/claude-md.js";
 
 export interface RunBridgeOptions {
   /** Called once the bridge is connected to Slack and ready to route messages. */
@@ -61,17 +67,35 @@ export async function runBridge(opts: RunBridgeOptions = {}): Promise<void> {
   const download = createFileDownloader(creds.botToken);
   const userResolver = createUserResolver(creds.botToken, logger);
 
+  const auditConfig = AuditConfigStore.load(home).get();
+  logger.info(
+    `audit trail ${auditConfig.enabled ? "enabled" : "disabled"} — data dir: ${auditDir(home)}`,
+  );
+  const channelResolver = createChannelResolver(creds.botToken, logger);
+  const auditStore = new AuditStore(home);
+  if (auditConfig.enabled) writeAuditClaudeMd(home); // keep the query guide current
+  const bin = claudeBin();
+  const auditRecorder = new AuditRecorder({
+    config: auditConfig,
+    store: auditStore,
+    logger,
+    resolveUser: (id) => userResolver.resolve(id),
+    resolveChannel: (id) => channelResolver.resolve(id),
+    summarize: ({ prompt, response }) => summarizeActivity({ bin, prompt, response }),
+  });
+
   const app = createSlackApp(
     creds,
     {
       mappings,
       sessions,
       logger,
-      claudeBin: claudeBin(),
+      claudeBin: bin,
       serializer,
       media,
       download,
       resolveUser: (id) => userResolver.resolve(id),
+      audit: { record: (a) => auditRecorder.record(a) },
     },
     logger,
   );

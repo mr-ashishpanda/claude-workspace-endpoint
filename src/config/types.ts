@@ -43,6 +43,8 @@ export interface Mapping {
    * Absolute path; omitted ⇒ inherit the bridge process's environment.
    */
   claudeConfigDir?: string;
+  /** Per-mapping audit override; absent fields inherit the global audit config. */
+  audit?: MappingAuditOverride;
 }
 
 /** Persisted Claude session for one scope key. */
@@ -63,4 +65,59 @@ export interface SessionRecord {
   messagesProcessed: number;
   /** ISO timestamp when the session record was first created. */
   createdAt: string;
+}
+
+/** Global audit-trail settings (per-mapping overrides live on `Mapping.audit`). */
+export interface AuditConfig {
+  /** Record audit records at all. */
+  enabled: boolean;
+  /** Generate a Claude summary per record (the only token-costing part). */
+  summary: boolean;
+  /** Retention thresholds used by the `audit` maintenance commands. */
+  retention: { compactAfterDays: number; pruneAfterDays: number };
+}
+
+export const DEFAULT_AUDIT_CONFIG: AuditConfig = {
+  enabled: false,
+  summary: false,
+  retention: { compactAfterDays: 90, pruneAfterDays: 1095 },
+};
+
+/**
+ * Per-mapping override of the global `AuditConfig` (lives on `Mapping.audit`,
+ * wired up in the mapping-override task). Unset fields fall back to the
+ * global config.
+ */
+export interface MappingAuditOverride {
+  enabled?: boolean;
+  summary?: boolean;
+}
+
+/** Input/output token counts for one Claude call. */
+export interface TokenUsage {
+  input: number;
+  output: number;
+}
+
+/** One audited Claude invocation. */
+export interface AuditRecord {
+  id: string;
+  ts: string;
+  slackTs: string;
+  durationMs: number;
+  user: string | null;
+  userName: string | null;
+  channel: string;
+  channelName: string | null;
+  threadTs: string | null;
+  identity: string;
+  workspace: string;
+  sessionId: string | null;
+  sessionRef: string | null;
+  outcome: "success" | "error";
+  error: string | null;
+  tokens: TokenUsage;
+  summaryTokens: TokenUsage | null;
+  summary: string | null;
+  summaryError: string | null;
 }

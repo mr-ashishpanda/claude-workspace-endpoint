@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { ClaudeModel } from "../config/types.js";
+import { ClaudeModel, TokenUsage } from "../config/types.js";
 
 /** Result of one Claude Code invocation. */
 export interface ClaudeResult {
@@ -7,6 +7,8 @@ export interface ClaudeResult {
   text: string;
   /** Claude Code session id for this conversation (for resuming). */
   sessionId: string | null;
+  /** Input/output token counts reported by this invocation. */
+  usage: TokenUsage;
 }
 
 /** Low-level process runner, injectable so tests can avoid spawning `claude`. */
@@ -58,18 +60,24 @@ export function buildClaudeArgs(
 /** Parse the JSON envelope `claude --output-format json` prints on stdout. */
 export function parseClaudeOutput(stdout: string): ClaudeResult {
   const trimmed = stdout.trim();
-  if (!trimmed) return { text: "", sessionId: null };
+  const zero: TokenUsage = { input: 0, output: 0 };
+  if (!trimmed) return { text: "", sessionId: null, usage: zero };
   try {
     const parsed = JSON.parse(trimmed) as {
       result?: unknown;
       session_id?: unknown;
+      usage?: { input_tokens?: unknown; output_tokens?: unknown };
     };
     const text = typeof parsed.result === "string" ? parsed.result : trimmed;
     const sessionId = typeof parsed.session_id === "string" ? parsed.session_id : null;
-    return { text, sessionId };
+    const usage: TokenUsage = {
+      input: typeof parsed.usage?.input_tokens === "number" ? parsed.usage.input_tokens : 0,
+      output: typeof parsed.usage?.output_tokens === "number" ? parsed.usage.output_tokens : 0,
+    };
+    return { text, sessionId, usage };
   } catch {
     // Fall back to raw text if Claude didn't emit JSON (e.g. an error string).
-    return { text: trimmed, sessionId: null };
+    return { text: trimmed, sessionId: null, usage: zero };
   }
 }
 
