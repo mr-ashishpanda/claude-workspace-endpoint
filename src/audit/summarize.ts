@@ -1,4 +1,4 @@
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { ProcessRunner, defaultProcessRunner, parseClaudeOutput } from "../claude/invoke.js";
 import { TokenUsage } from "../config/types.js";
@@ -12,8 +12,9 @@ const SYSTEM = [
 /**
  * Args for the lightweight summarizer call. Print mode, JSON output, Haiku.
  * Run in an isolated temp cwd (see {@link summarizeActivity}) so no project
- * CLAUDE.md / settings / MCP are discovered. Additional strip flags confirmed
- * against the installed `claude` during implementation.
+ * CLAUDE.md / settings / MCP are discovered. No additional context-stripping
+ * flags are added here — that is intentionally out of scope for this task.
+ * Revisit if further context-leak vectors are found.
  */
 export function buildSummaryArgs(): string[] {
   return ["-p", "--output-format", "json", "--model", "claude-haiku-4-5"];
@@ -32,6 +33,7 @@ export async function summarizeActivity(
   deps: SummarizeDeps,
 ): Promise<{ summary: string; tokens: TokenUsage }> {
   const runner = deps.runner ?? defaultProcessRunner;
+  const createdCwd = deps.cwd === undefined;
   const cwd = deps.cwd ?? mkdtempSync(`${tmpdir()}/sum-`);
   const input = [
     SYSTEM,
@@ -44,8 +46,12 @@ export async function summarizeActivity(
     "",
     "Write the 1-2 sentence summary now.",
   ].join("\n");
-  const { stdout, stderr, code } = await runner.run(deps.bin, buildSummaryArgs(), cwd, input);
-  if (code !== 0) throw new Error(`summarizer claude exited with code ${code}: ${stderr}`);
-  const parsed = parseClaudeOutput(stdout);
-  return { summary: parsed.text.trim(), tokens: parsed.usage };
+  try {
+    const { stdout, stderr, code } = await runner.run(deps.bin, buildSummaryArgs(), cwd, input);
+    if (code !== 0) throw new Error(`summarizer claude exited with code ${code}: ${stderr}`);
+    const parsed = parseClaudeOutput(stdout);
+    return { summary: parsed.text.trim(), tokens: parsed.usage };
+  } finally {
+    if (createdCwd) rmSync(cwd, { recursive: true, force: true });
+  }
 }
