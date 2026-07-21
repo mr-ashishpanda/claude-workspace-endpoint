@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { AuditRecord } from "../config/types.js";
@@ -267,5 +267,10 @@ describe("runAuditMaintenance prune", () => {
 
     expect(existsSync(oldPath)).toBe(false);
     expect(existsSync(rollupPath)).toBe(true);
+
+    // Assert that the rollup captured the record before the partition was deleted
+    const rollup = JSON.parse(readFileSync(rollupPath, "utf8"));
+    expect(rollup.byUser["U1"]?.count).toBe(1);
+    expect(rollup.byChannel["C1"]?.count).toBe(1);
   });
 });
