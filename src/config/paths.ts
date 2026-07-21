@@ -35,3 +35,21 @@ export function sessionsPath(home: string): string {
 export function mediaDir(home: string): string {
   return resolve(home, "media");
 }
+
+/** Root directory for the audit trail (partitions + CLAUDE.md). */
+export function auditDir(home: string): string {
+  return resolve(home, "audit");
+}
+
+/** Global audit settings file (sibling of the audit/ data dir). */
+export function auditConfigPath(home: string): string {
+  return resolve(home, "audit-config.json");
+}
+
+/** Daily audit partition path, `audit/YYYY/MM/YYYY-MM-DD.jsonl` (UTC). */
+export function auditPartitionPath(home: string, date: Date): string {
+  const y = String(date.getUTCFullYear());
+  const m = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(date.getUTCDate()).padStart(2, "0");
+  return resolve(auditDir(home), y, m, `${y}-${m}-${d}.jsonl`);
+}
