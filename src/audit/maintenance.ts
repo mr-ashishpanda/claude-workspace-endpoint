@@ -151,10 +151,17 @@ function bump(bucket: Record<string, RollupBucket>, key: string, record: AuditRe
   bucket[key] = entry;
 }
 
+/** Path to the monthly rollup file, `audit/YYYY/MM.rollup.json`, for a given `YYYY-MM` month. */
+export function rollupPath(home: string, month: string): string {
+  const { yearStr, monthStr } = parseMonth(month);
+  return resolve(auditDir(home), yearStr, `${monthStr}.rollup.json`);
+}
+
 /**
  * Read all records for `month` (across hot `.jsonl` and warm `.jsonl.gz`
- * partitions) and write the aggregate to `audit/YYYY/MM.rollup.json`. Returns
- * the file path written.
+ * partitions) and write the aggregate to `audit/YYYY/MM.rollup.json`. Always
+ * overwrites — this is the explicit `audit rollup --month` refresh path.
+ * Returns the file path written.
  */
 export function rollup(home: string, month: string): string {
   const { since, until } = monthRange(month);
@@ -175,9 +182,50 @@ export function rollup(home: string, month: string): string {
     lastTs: records.length > 0 ? (records[records.length - 1] as AuditRecord).ts : null,
   };
 
-  const { yearStr, monthStr } = parseMonth(month);
-  const path = resolve(auditDir(home), yearStr, `${monthStr}.rollup.json`);
+  const path = rollupPath(home, month);
   mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, JSON.stringify(result, null, 2) + "\n");
   return path;
+}
+
+/** Distinct `YYYY-MM` months among a set of partition paths (basenames `YYYY-MM-DD.jsonl[.gz]`). */
+function distinctMonthsOfPartitions(paths: string[]): string[] {
+  const months = new Set<string>();
+  for (const path of paths) {
+    const match = PARTITION_RE.exec(path.split(/[/\\]/).pop() ?? "");
+    if (match) months.add(`${match[1]}-${match[2]}`);
+  }
+  return [...months].sort();
+}
+
+/**
+ * Roll up every month affected by an upcoming prune, then prune. Once a month
+ * already has a rollup file, it is NOT regenerated here — the first prune run
+ * that ever touches a past month always sees the whole month (no new records
+ * land in a past month), so that first rollup is complete. A later prune run
+ * only sees the surviving (partial) subset of that month's partitions, and
+ * regenerating from it would clobber the complete aggregate with a partial
+ * one. Skipping regeneration when a rollup already exists preserves the
+ * complete aggregate across repeated prune runs.
+ *
+ * `rollup()` itself always overwrites — that's the explicit `audit rollup
+ * --month` refresh path — this skip-if-exists guard lives only here.
+ */
+export function pruneWithRollups(
+  home: string,
+  olderThanDays: number,
+  now: () => Date = () => new Date(),
+): { rolledUp: string[]; removed: string[] } {
+  const targets = partitionsToPrune(home, olderThanDays, now);
+  const months = distinctMonthsOfPartitions(targets);
+
+  const rolledUp: string[] = [];
+  for (const month of months) {
+    if (existsSync(rollupPath(home, month))) continue;
+    rollup(home, month);
+    rolledUp.push(month);
+  }
+
+  const removed = prune(home, olderThanDays, now);
+  return { rolledUp, removed };
 }

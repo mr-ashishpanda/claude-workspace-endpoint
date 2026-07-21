@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { gunzipSync, gzipSync } from "node:zlib";
-import { compact, prune, rollup } from "./maintenance.js";
+import { compact, prune, pruneWithRollups, rollup, rollupPath } from "./maintenance.js";
 import { AuditRecord } from "../config/types.js";
 import { auditDir, auditPartitionPath } from "../config/paths.js";
 
@@ -209,5 +209,67 @@ describe("prune", () => {
     expect(existsSync(oldGz)).toBe(false);
     expect(existsSync(newPath)).toBe(true);
     expect(existsSync(rollupPath)).toBe(true);
+  });
+});
+
+describe("pruneWithRollups", () => {
+  it("preserves a month's complete rollup across two prune runs that each see only part of the month", () => {
+    const home = tmp();
+    // Same past month (2026-05), two day-partitions with records for the same
+    // user, spread far enough apart that a single prune cutoff can straddle
+    // them: one run prunes only the older day, a later run prunes the newer one.
+    const day1 = writePartition(home, new Date("2026-05-01T00:00:00Z"), [
+      rec({
+        id: "d1",
+        ts: "2026-05-01T09:00:00.000Z",
+        user: "U1",
+        channel: "C1",
+        tokens: { input: 10, output: 20 },
+      }),
+    ]);
+    const day2 = writePartition(home, new Date("2026-05-20T00:00:00Z"), [
+      rec({
+        id: "d2",
+        ts: "2026-05-20T09:00:00.000Z",
+        user: "U1",
+        channel: "C1",
+        tokens: { input: 3, output: 7 },
+      }),
+    ]);
+    const rollupFile = rollupPath(home, "2026-05");
+
+    // Run A: cutoff (2026-05-05) falls strictly between the two days, so only
+    // day1 is pruned. Both partitions still exist when rollup() runs, so the
+    // rollup it writes is the COMPLETE month.
+    const nowA = () => new Date("2026-05-15T00:00:00.000Z");
+    const resultA = pruneWithRollups(home, 10, nowA);
+    expect(resultA.rolledUp).toEqual(["2026-05"]);
+    expect(resultA.removed).toEqual([day1]);
+    expect(existsSync(day1)).toBe(false);
+    expect(existsSync(day2)).toBe(true);
+
+    const afterA = JSON.parse(readFileSync(rollupFile, "utf8")) as {
+      byUser: Record<string, { count: number; input: number; output: number }>;
+    };
+    expect(afterA.byUser.U1).toEqual({ count: 2, input: 13, output: 27 });
+
+    // Run B (weeks later): cutoff (2026-06-05) is now past day2 too, so day2
+    // gets pruned in this run. The month already has a rollup from run A, so
+    // pruneWithRollups must SKIP regenerating it here — day1 is already gone
+    // by this point, so if rollup() ran again it would see only day2's record
+    // (count 1, input 3, output 7) and clobber the complete aggregate from
+    // run A down to that partial one.
+    const nowB = () => new Date("2026-06-15T00:00:00.000Z");
+    const resultB = pruneWithRollups(home, 10, nowB);
+    expect(resultB.rolledUp).toEqual([]);
+    expect(resultB.removed).toEqual([day2]);
+    expect(existsSync(day2)).toBe(false);
+
+    const afterB = JSON.parse(readFileSync(rollupFile, "utf8")) as {
+      byUser: Record<string, { count: number; input: number; output: number }>;
+    };
+    // Still the complete aggregate from run A — not clobbered to the partial
+    // one that a naive "rollup every affected month" would have produced.
+    expect(afterB.byUser.U1).toEqual({ count: 2, input: 13, output: 27 });
   });
 });

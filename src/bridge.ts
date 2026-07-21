@@ -70,7 +70,7 @@ export async function runBridge(opts: RunBridgeOptions = {}): Promise<void> {
   const auditConfig = AuditConfigStore.load(home).get();
   const channelResolver = createChannelResolver(creds.botToken, logger);
   const auditStore = new AuditStore(home);
-  writeAuditClaudeMd(home); // keep the query guide current
+  if (auditConfig.enabled) writeAuditClaudeMd(home); // keep the query guide current
   const bin = claudeBin();
   const auditRecorder = new AuditRecorder({
     config: auditConfig,

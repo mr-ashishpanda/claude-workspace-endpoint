@@ -1,6 +1,5 @@
-import { basename } from "node:path";
 import { AuditStore } from "../audit/partition.js";
-import { compact, partitionsToPrune, prune, rollup } from "../audit/maintenance.js";
+import { compact, partitionsToPrune, pruneWithRollups, rollup } from "../audit/maintenance.js";
 import { AuditConfigStore } from "../config/audit-config.js";
 import { resolveHome } from "../config/paths.js";
 import { AuditRecord } from "../config/types.js";
@@ -190,20 +189,6 @@ function findFlagValue(args: string[], flag: string): string | undefined {
   return args[idx + 1];
 }
 
-const PARTITION_FILENAME_RE = /^(\d{4})-(\d{2})-\d{2}\.jsonl(\.gz)?$/;
-
-/** Parse a partition path's `YYYY-MM-DD.jsonl[.gz]` basename into its `YYYY-MM` month. */
-function monthOfPartitionPath(path: string): string {
-  const match = PARTITION_FILENAME_RE.exec(basename(path));
-  if (!match) throw new Error(`Not a partition file path: "${path}"`);
-  return `${match[1]}-${match[2]}`;
-}
-
-/** Distinct `YYYY-MM` months among a set of partition paths, e.g. from {@link partitionsToPrune}. */
-function distinctMonthsOfPartitions(paths: string[]): string[] {
-  return [...new Set(paths.map(monthOfPartitionPath))].sort();
-}
-
 function runCompact(home: string, args: string[]): void {
   const raw = findFlagValue(args, "--older-than");
   const days = raw
@@ -235,12 +220,11 @@ function runPrune(home: string, args: string[]): void {
     : AuditConfigStore.load(home).get().retention.pruneAfterDays;
   const yes = args.includes("--yes");
 
-  // The exact set of partitions `prune` would delete — the single source of
-  // truth used for both the dry-run advisory and the months rolled up below,
-  // so they can never disagree with what actually gets removed.
-  const targets = partitionsToPrune(home, days);
-
   if (!yes) {
+    // The exact set of partitions `prune` would delete — the single source of
+    // truth for the dry-run advisory, so it can never disagree with what
+    // actually gets removed.
+    const targets = partitionsToPrune(home, days);
     process.stdout.write(
       targets.length === 0
         ? `No partitions older than ${days}d to prune.\n`
@@ -250,10 +234,7 @@ function runPrune(home: string, args: string[]): void {
     return;
   }
 
-  for (const month of distinctMonthsOfPartitions(targets)) {
-    rollup(home, month);
-  }
-  const removed = prune(home, days);
+  const { removed } = pruneWithRollups(home, days);
   process.stdout.write(`Removed ${removed.length} partition(s) older than ${days}d.\n`);
 }
 
