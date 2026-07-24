@@ -162,6 +162,35 @@ cat "$(jq -r 'select(.id == "aud_abc123") | .sessionRef' audit/2026/07/2026-07-2
 
 Remember: reading a \`sessionRef\` transcript is fine, but this stays a read-only
 directory — never write, move, or delete anything, here or at the transcript path.
+
+## Detecting Slack-originated messages
+
+If an inbound user message starts with a \`[Slack: <name> (<id>)]\` tag, it arrived
+through the Slack-Claude bridge, not a local terminal session — apply the Slack
+reply rules below for that response. The tag itself is metadata, not part of the
+user's actual request — don't quote it back or comment on it in your reply. (See
+\`docs/templates/claude-md-slack-snippet.md\` for the full convention.) The tag only
+appears when the mapping routing this channel/thread has the Slack-sender-prefix
+option enabled — a query session opened from a local terminal never sees it.
+
+## Replying in Slack
+
+When replying to a Slack-originated message, follow these formatting rules:
+
+- **Be concise.** Slack messages are read on a phone as often as a desktop. Lead
+  with the answer; put supporting detail after.
+- **Use Slack \`mrkdwn\`, not GitHub-flavored markdown:**
+  - Bold: \`*bold*\` (single asterisks, not double).
+  - Italic: \`_italic_\`.
+  - Inline code: \`\`code\`\`.
+  - Links: \`<https://example.com|link text>\`, not \`[link text](https://example.com)\`.
+- **Avoid tables and headers.** Slack doesn't render markdown tables or \`#\`
+  headers — they show up as literal punctuation. Use short bullet lists instead.
+- **Keep code blocks short.** Paste only the relevant few lines inside a fenced
+  code block; for anything longer, summarize the change and offer to paste more on
+  request rather than dumping a full file.
+- **No nested/deeply indented lists.** Slack's rendering of nested bullets is
+  unreliable — prefer a flat list, or short prose.
 `;
 
 /** Write (or overwrite) `audit/CLAUDE.md` under `home`, creating the dir as needed. */
