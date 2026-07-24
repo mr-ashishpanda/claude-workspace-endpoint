@@ -11,186 +11,136 @@ import { auditDir } from "../config/paths.js";
  */
 export const AUDIT_CLAUDE_MD = `# Audit trail — query guide
 
-This directory is the bridge's audit trail: one append-only record per completed
-Claude invocation routed through the Slack-Claude bridge, capturing who did what,
-where, and what it cost. You are reading this because a \`claude\` session was
-opened inside \`audit/\` — treat this as your job description: **answer questions
-about the audit trail by querying the files below.**
+Append-only record per completed Claude invocation routed through the
+Slack-Claude bridge (who, where, cost). A \`claude\` session opened in \`audit/\`
+is a **read-only query assistant**: answer questions by querying the files
+below.
 
 ## Read-only guardrail
 
-This directory is **read-only for you**. Analyze, search, and summarize — but
-**never modify, delete, rewrite, gzip, or otherwise touch any file under \`audit/\`**,
-including this one. Compaction, rollups, and pruning are handled exclusively by
-the bridge's own \`slack-claude audit compact|rollup|prune\` maintenance commands,
-never by an interactive session. If a question requires changing retention (e.g.
-"delete records older than a year"), tell the user to run the CLI command instead
-of doing it yourself.
+**Never modify, delete, rewrite, gzip, or otherwise touch any file under
+\`audit/\`**, including this one. Compaction/rollup/pruning are done only by
+\`slack-claude audit compact|rollup|prune\`, never by an interactive session —
+for a retention request ("delete records older than a year"), tell the user
+to run that CLI command instead.
 
 ## Partition layout
 
-Records are time-partitioned by UTC date into three tiers, oldest data becoming
-more compact over time:
+UTC-date-partitioned, 3 tiers, oldest data most compact:
 
 \`\`\`
 audit/
   CLAUDE.md                    ← this file
   2026/
     07/
-      2026-07-21.jsonl         ← hot: today/recent, raw JSON Lines, append-only
+      2026-07-21.jsonl         ← hot: recent, raw JSON Lines, append-only
       2026-07-20.jsonl.gz      ← warm: gzipped daily partition (still queryable)
-    06.rollup.json             ← cold: monthly aggregate (per-user/per-channel totals)
+    06.rollup.json             ← cold: monthly aggregate (per-user/channel totals)
 \`\`\`
 
-- **Hot** — \`audit/YYYY/MM/YYYY-MM-DD.jsonl\`. One JSON object per line, one line
-  per invocation. Most recent history (default up to ~90 days).
-- **Warm** — \`audit/YYYY/MM/YYYY-MM-DD.jsonl.gz\`. Same format, gzip-compressed
-  by the \`audit compact\` command. Read directly with \`zcat\` or \`rg -z\` —
-  never decompress to a new file (that would be a write).
-- **Cold** — \`audit/YYYY/MM.rollup.json\`. A monthly aggregate (per-user counts,
-  per-channel counts, token totals, first/last activity timestamps) written by
-  \`audit rollup --month YYYY-MM\`. Use this for long-range questions instead of
-  scanning raw partitions — the detail records may have been pruned but the
-  rollup survives.
+- **Hot** \`YYYY/MM/YYYY-MM-DD.jsonl\` — one JSON object per invocation, up to ~90d.
+- **Warm** \`YYYY/MM/YYYY-MM-DD.jsonl.gz\` — same format; read with \`zcat\`/\`rg -z\`,
+  never decompress to a new file (that's a write).
+- **Cold** \`YYYY/MM.rollup.json\` — monthly aggregate (per-user/channel counts,
+  token totals, first/last activity) from \`audit rollup --month\`. Prefer this
+  for long-range questions — detail records may be pruned, rollups survive.
 
-## The \`AuditRecord\` schema
+## \`AuditRecord\` schema
 
-Each line in a \`.jsonl\`/\`.jsonl.gz\` file is one JSON object with these fields:
+One JSON object per line:
 
-| Field           | Meaning                                                                          |
-| --------------- | --------------------------------------------------------------------------------- |
-| \`id\`            | Correlation id for this record (also appears in \`bridge.log\` for cross-reference). |
-| \`ts\`             | ISO timestamp of when the bridge processed the invocation.                       |
-| \`slackTs\`        | The originating Slack event's \`ts\` (message timestamp).                          |
-| \`durationMs\`     | Wall-clock duration of the Claude invocation, in milliseconds.                    |
-| \`user\`           | Slack user id of the requester (\`null\` if unknown).                              |
-| \`userName\`       | Resolved display name for \`user\` (\`null\` if resolution failed).                  |
-| \`channel\`        | Slack channel id the message came from.                                          |
-| \`channelName\`    | Resolved channel name, e.g. \`"#eng-backend"\` (\`null\` if resolution failed).      |
-| \`threadTs\`       | Thread timestamp for thread-scoped invocations; \`null\` for channel scope.         |
-| \`identity\`       | The mapping identity that handled the invocation.                                 |
-| \`workspace\`      | Absolute path to the local workspace directory Claude ran in.                    |
-| \`sessionId\`      | Claude Code session id for this invocation, if established.                      |
-| \`sessionRef\`     | Absolute path to the full Claude transcript for this invocation (see Drill-down). |
-| \`outcome\`        | \`"success"\` or \`"error"\`.                                                        |
-| \`error\`          | Reason string when \`outcome\` is not \`"success"\`; otherwise \`null\`.               |
-| \`tokens\`         | \`{ input, output }\` token counts for the main invocation.                        |
-| \`summaryTokens\`  | \`{ input, output }\` for the summarizer call, or \`null\` if summaries are off/failed. |
-| \`summary\`        | 1–2 sentence Claude-generated summary of what the user asked and what was done.  |
-| \`summaryError\`   | Set when the summarizer failed after retry; otherwise \`null\`.                     |
+| Field | Meaning |
+| --- | --- |
+| \`id\` | Correlation id (cross-references \`bridge.log\`). |
+| \`ts\` | ISO timestamp the bridge processed the invocation. |
+| \`slackTs\` | Originating Slack event \`ts\`. |
+| \`durationMs\` | Invocation wall-clock duration. |
+| \`user\` / \`userName\` | Slack user id / resolved display name (\`null\` if unknown). |
+| \`channel\` / \`channelName\` | Slack channel id / resolved name, e.g. \`"#eng-backend"\`. |
+| \`threadTs\` | Thread ts for thread-scoped invocations; \`null\` for channel scope. |
+| \`identity\` | Mapping identity that handled it. |
+| \`workspace\` | Absolute path to the workspace Claude ran in. |
+| \`sessionId\` | Claude Code session id, if established. |
+| \`sessionRef\` | Absolute path to the full transcript (see Drill-down). |
+| \`outcome\` / \`error\` | \`"success"\`/\`"error"\`; error reason or \`null\`. |
+| \`tokens\` | \`{ input, output }\` for the main invocation. |
+| \`summaryTokens\` | Same, for the summarizer call, or \`null\`. |
+| \`summary\` | 1–2 sentence summary of the request and outcome. |
+| \`summaryError\` | Set if summarization failed after retry; else \`null\`. |
 
 ## Efficient scanning
 
-Raw partitions can add up over months of activity — always narrow before you scan:
-
-1. **Narrow by date first.** If the question mentions a date, week, or "today",
-   open only the matching \`audit/YYYY/MM/YYYY-MM-DD.jsonl[.gz]\` file(s) — never
-   glob every partition when the range is known.
-2. **Prefer \`rg\` and \`jq\` over loading files into context.** These files are
-   JSON Lines; \`rg\` searches raw text fast, \`jq\` filters/aggregates structured
-   fields without you reading every line yourself.
-3. **Use rollups for long-range aggregate questions** ("how many invocations did
-   we do last quarter", "total tokens this year") instead of scanning raw
-   partitions — read the relevant \`MM.rollup.json\` files instead.
-4. **Never load a whole year at once.** If a question truly spans a wide range
-   with no rollup available, process month-by-month or day-by-day and
-   accumulate results rather than concatenating everything into one command.
+1. **Narrow by date first** — open only the matching \`YYYY-MM-DD.jsonl[.gz]\`
+   file(s); never glob every partition when the range is known.
+2. **Prefer \`rg\`/\`jq\` over loading files into context** for search/filter/aggregate.
+3. **Use rollups for long-range aggregates** ("last quarter", "this year")
+   instead of scanning raw partitions.
+4. **Never load a whole year at once** — process month/day-by-day and
+   accumulate instead of concatenating everything into one command.
 
 ## Common recipes
 
-Activity by a specific user on a given day:
-
+User activity for a day:
 \`\`\`sh
 jq -c 'select(.user == "U0423")' audit/2026/07/2026-07-21.jsonl
 \`\`\`
 
-Activity in a specific channel across a month (including gzipped days):
-
+Channel activity across a month (hot + warm):
 \`\`\`sh
-rg -z --json '"channel":"C0001"' audit/2026/07/*.jsonl* | jq -c '.data.lines.text' 2>/dev/null
-# or, simpler:
 for f in audit/2026/07/*.jsonl*; do
   ( [[ $f == *.gz ]] && zcat "$f" || cat "$f" ) | jq -c 'select(.channel == "C0001")'
 done
 \`\`\`
 
-Everything that happened on one date (mixing hot/warm transparently):
-
-\`\`\`sh
-f=audit/2026/07/2026-07-20.jsonl
-[[ -f "$f.gz" ]] && zcat "$f.gz" | jq -c '.' || jq -c '.' "$f"
-\`\`\`
-
 Token spend per user for a day:
-
 \`\`\`sh
 jq -s 'group_by(.userName) | map({user: .[0].userName,
   input: (map(.tokens.input) | add), output: (map(.tokens.output) | add)})' \\
   audit/2026/07/2026-07-21.jsonl
 \`\`\`
 
-Token spend per user across a month, from the rollup (preferred over scanning
-raw partitions):
-
+Token spend per user across a month (from rollup, preferred):
 \`\`\`sh
 jq '.byUser' audit/2026/07.rollup.json
 \`\`\`
 
-Busiest workspace on a given day:
-
+Busiest workspace for a day:
 \`\`\`sh
 jq -s 'group_by(.workspace) | map({workspace: .[0].workspace, count: length}) |
   sort_by(-.count)' audit/2026/07/2026-07-21.jsonl
 \`\`\`
 
-## Drill-down: full transcript detail
+## Drill-down: full transcript
 
-An audit record is a summary, not the whole story. To see exactly what happened
-in one invocation — the full prompt, tool calls, and response — read the file at
-that record's \`sessionRef\`: it is the absolute path to the complete Claude
-transcript (JSONL) for that session.
-
-If \`sessionRef\` is \`null\` (older records, or a case where the path could not be
-derived), fall back to looking up the transcript by \`sessionId\` under the
-relevant Claude config directory instead.
+A record is a summary. For the full prompt/tool calls/response, read
+\`sessionRef\` — the absolute path to that invocation's transcript. If \`null\`,
+look up the transcript by \`sessionId\` under the Claude config directory instead.
 
 \`\`\`sh
-# find the record, then read its transcript
-jq -c 'select(.id == "aud_abc123")' audit/2026/07/2026-07-21.jsonl
 cat "$(jq -r 'select(.id == "aud_abc123") | .sessionRef' audit/2026/07/2026-07-21.jsonl)"
 \`\`\`
 
-Remember: reading a \`sessionRef\` transcript is fine, but this stays a read-only
-directory — never write, move, or delete anything, here or at the transcript path.
+Reading a transcript is fine; still never write/move/delete anything, here or
+at the transcript path.
 
 ## Detecting Slack-originated messages
 
-If an inbound user message starts with a \`[Slack: <name> (<id>)]\` tag, it arrived
-through the Slack-Claude bridge, not a local terminal session — apply the Slack
-reply rules below for that response. The tag itself is metadata, not part of the
-user's actual request — don't quote it back or comment on it in your reply. (See
-\`docs/templates/claude-md-slack-snippet.md\` for the full convention.) The tag only
-appears when the mapping routing this channel/thread has the Slack-sender-prefix
-option enabled — a query session opened from a local terminal never sees it.
+A user message starting with \`[Slack: <name> (<id>)]\` arrived via the bridge,
+not a terminal — apply the Slack reply rules below. The tag is metadata; don't
+quote or comment on it. (Full convention:
+\`docs/templates/claude-md-slack-snippet.md\`.) Only appears when the mapping's
+Slack-sender-prefix option is enabled.
 
 ## Replying in Slack
 
-When replying to a Slack-originated message, follow these formatting rules:
-
-- **Be concise.** Slack messages are read on a phone as often as a desktop. Lead
-  with the answer; put supporting detail after.
-- **Use Slack \`mrkdwn\`, not GitHub-flavored markdown:**
-  - Bold: \`*bold*\` (single asterisks, not double).
-  - Italic: \`_italic_\`.
-  - Inline code: \`\`code\`\`.
-  - Links: \`<https://example.com|link text>\`, not \`[link text](https://example.com)\`.
-- **Avoid tables and headers.** Slack doesn't render markdown tables or \`#\`
-  headers — they show up as literal punctuation. Use short bullet lists instead.
-- **Keep code blocks short.** Paste only the relevant few lines inside a fenced
-  code block; for anything longer, summarize the change and offer to paste more on
-  request rather than dumping a full file.
-- **No nested/deeply indented lists.** Slack's rendering of nested bullets is
-  unreliable — prefer a flat list, or short prose.
+- **Be concise** — leads get read on a phone; answer first, detail after.
+- **Slack \`mrkdwn\`, not GFM**: \`*bold*\` (single asterisks), \`_italic_\`,
+  inline \`code\`, \`<https://example.com|link text>\` (not \`[text](url)\`).
+- **No tables/headers** — Slack renders \`#\` and table syntax as literal
+  punctuation; use short bullet lists.
+- **Short code blocks** — paste only the relevant lines; offer to send more
+  rather than dumping a full file.
+- **No nested/deeply indented lists** — flat lists or short prose only.
 `;
 
 /** Write (or overwrite) `audit/CLAUDE.md` under `home`, creating the dir as needed. */
